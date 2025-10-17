@@ -30,6 +30,43 @@ export const TicTacToeLogic = {
 
   isValidMove: (board, position) => {
     return position >= 0 && position < 9 && board[position] === null;
+  },
+
+  // Get player symbol based on player index
+  getPlayerSymbol: (playerIndex) => {
+    return playerIndex === 0 ? 'X' : 'O';
+  },
+
+  // Check if game is over
+  isGameOver: (board) => {
+    const result = TicTacToeLogic.checkWinner(board);
+    return result !== null;
+  },
+
+  // Get available moves
+  getAvailableMoves: (board) => {
+    return board
+      .map((cell, index) => cell === null ? index : null)
+      .filter(index => index !== null);
+  },
+
+  // Create initial game state for multiplayer
+  createGameState: (roomId, players) => {
+    return {
+      roomId,
+      gameType: 'tic-tac-toe',
+      board: Array(9).fill(null),
+      moves: [],
+      currentTurn: players[0].userId,
+      players: players.map((player, index) => ({
+        ...player,
+        symbol: TicTacToeLogic.getPlayerSymbol(index),
+        ready: false
+      })),
+      status: 'waiting',
+      winner: null,
+      createdAt: new Date()
+    };
   }
 };
 

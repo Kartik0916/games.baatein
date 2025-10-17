@@ -9,9 +9,10 @@ import {
   Animated,
   Modal
 } from 'react-native';
-import { RtcLocalView, RtcRemoteView } from 'react-native-agora';
 import socketService from '../services/socketService';
-import agoraService from '../services/agoraService';
+import GameBoard from '../components/GameBoard';
+import VideoCallView from '../components/VideoCallView';
+import { TicTacToeLogic } from '../utils/gameLogic';
 
 const { width, height } = Dimensions.get('window');
 const CELL_SIZE = (width - 80) / 3;
@@ -27,9 +28,6 @@ const TicTacToeScreen = ({ route, navigation }) => {
   const [winningLine, setWinningLine] = useState(null);
   const [mySymbol, setMySymbol] = useState(null);
   const [opponentSymbol, setOpponentSymbol] = useState(null);
-  const [remoteUid, setRemoteUid] = useState(null);
-  const [isAudioMuted, setIsAudioMuted] = useState(false);
-  const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [showDrawOffer, setShowDrawOffer] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [showChat, setShowChat] = useState(false);
@@ -39,7 +37,6 @@ const TicTacToeScreen = ({ route, navigation }) => {
   useEffect(() => {
     initializeGame();
     setupSocketListeners();
-    setupAgoraListeners();
 
     return () => {
       cleanup();
@@ -52,16 +49,6 @@ const TicTacToeScreen = ({ route, navigation }) => {
       const playerIndex = players.findIndex(p => p.userId === userId);
       setMySymbol(playerIndex === 0 ? 'X' : 'O');
       setOpponentSymbol(playerIndex === 0 ? 'O' : 'X');
-
-      // Initialize Agora
-      await agoraService.initialize(roomData.agoraAppId || 'YOUR_AGORA_APP_ID');
-      
-      // Join Agora channel
-      const agoraToken = roomData.agoraToken || null;
-      const channelName = roomData.agoraChannel;
-      const uid = parseInt(userId) || 0;
-      
-      await agoraService.joinChannel(agoraToken, channelName, uid);
 
       console.log('✅ Game initialized');
     } catch (error) {
@@ -94,14 +81,26 @@ const TicTacToeScreen = ({ route, navigation }) => {
       setWinner(data.winner);
       
       if (data.winner !== 'draw') {
-        // Find winning line
-        const line = findWinningLine(data.gameState.board);
-        setWinningLine(line);
+        // Find winning line using game logic
+        const result = TicTacToeLogic.checkWinner(data.gameState.board);
+        if (result && result.line) {
+          setWinningLine(result.line);
+        }
       }
 
       setTimeout(() => {
         showGameOverDialog(data);
       }, 1000);
+    });
+
+    socketService.on('gameRestarted', (data) => {
+      console.log('🔄 Game restarted', data);
+      setGameStatus('waiting');
+      setBoard(data.room.gameState.board);
+      setCurrentTurn(null);
+      setWinner(null);
+      setWinningLine(null);
+      setPlayers(data.room.players);
     });
 
     socketService.on('playerLeft', (data) => {
@@ -121,17 +120,6 @@ const TicTacToeScreen = ({ route, navigation }) => {
     });
   };
 
-  const setupAgoraListeners = () => {
-    agoraService.addEventListener('onUserJoined', (uid) => {
-      console.log('👤 Remote user joined:', uid);
-      setRemoteUid(uid);
-    });
-
-    agoraService.addEventListener('onUserOffline', (uid) => {
-      console.log('👤 Remote user left:', uid);
-      setRemoteUid(null);
-    });
-  };
 
   const cleanup = async () => {
     try {
@@ -142,7 +130,6 @@ const TicTacToeScreen = ({ route, navigation }) => {
       socketService.removeAllListeners('chatMessage');
       socketService.removeAllListeners('drawOffered');
 
-      await agoraService.leaveChannel();
       socketService.leaveRoom(roomData.roomId);
     } catch (error) {
       console.error('Error during cleanup:', error);
@@ -186,21 +173,6 @@ const TicTacToeScreen = ({ route, navigation }) => {
     ]).start();
   };
 
-  const findWinningLine = (board) => {
-    const lines = [
-      [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
-      [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
-      [0, 4, 8], [2, 4, 6]             // Diagonals
-    ];
-
-    for (let line of lines) {
-      const [a, b, c] = line;
-      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-        return line;
-      }
-    }
-    return null;
-  };
 
   const showGameOverDialog = (data) => {
     let title = 'Game Over';
@@ -224,21 +196,10 @@ const TicTacToeScreen = ({ route, navigation }) => {
   };
 
   const handlePlayAgain = () => {
-    // Navigate back to lobby or create new room
-    navigation.goBack();
+    // Restart the current game
+    socketService.restartGame(roomData.roomId);
   };
 
-  const toggleAudio = async () => {
-    const muted = !isAudioMuted;
-    await agoraService.muteLocalAudio(muted);
-    setIsAudioMuted(muted);
-  };
-
-  const toggleVideo = async () => {
-    const muted = !isVideoMuted;
-    await agoraService.muteLocalVideo(muted);
-    setIsVideoMuted(muted);
-  };
 
   const handleOfferDraw = () => {
     Alert.alert(
@@ -274,87 +235,7 @@ const TicTacToeScreen = ({ route, navigation }) => {
     );
   };
 
-  const renderCell = (index) => {
-    const value = board[index];
-    const isWinningCell = winningLine && winningLine.includes(index);
 
-    return (
-      <TouchableOpacity
-        key={index}
-        style={[
-          styles.cell,
-          isWinningCell && styles.winningCell
-        ]}
-        onPress={() => handleCellPress(index)}
-        disabled={gameStatus !== 'active' || currentTurn !== userId || value !== null}
-      >
-        <Animated.View style={{ transform: [{ scale: scaleAnims[index] }] }}>
-          <Text style={[
-            styles.cellText,
-            value === 'X' ? styles.xText : styles.oText,
-            isWinningCell && styles.winningText
-          ]}>
-            {value || ''}
-          </Text>
-        </Animated.View>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderBoard = () => {
-    return (
-      <View style={styles.boardContainer}>
-        <View style={styles.board}>
-          {Array(9).fill(null).map((_, index) => renderCell(index))}
-        </View>
-      </View>
-    );
-  };
-
-  const renderVideoViews = () => {
-    return (
-      <View style={styles.videoContainer}>
-        {/* Local Video - Small floating window */}
-        <View style={styles.localVideoContainer}>
-          <RtcLocalView.SurfaceView
-            style={styles.localVideo}
-            channelId={roomData.agoraChannel}
-            renderMode={1}
-          />
-          <View style={styles.videoControls}>
-            <TouchableOpacity
-              style={styles.videoButton}
-              onPress={toggleAudio}
-            >
-              <Text style={styles.videoButtonText}>
-                {isAudioMuted ? '🔇' : '🔊'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.videoButton}
-              onPress={toggleVideo}
-            >
-              <Text style={styles.videoButtonText}>
-                {isVideoMuted ? '📷' : '📹'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Remote Video - Background or small window */}
-        {remoteUid && (
-          <View style={styles.remoteVideoContainer}>
-            <RtcRemoteView.SurfaceView
-              style={styles.remoteVideo}
-              uid={remoteUid}
-              channelId={roomData.agoraChannel}
-              renderMode={1}
-            />
-          </View>
-        )}
-      </View>
-    );
-  };
 
   const renderGameInfo = () => {
     const isMyTurn = currentTurn === userId;
@@ -405,8 +286,14 @@ const TicTacToeScreen = ({ route, navigation }) => {
 
   return (
     <View style={styles.container}>
-      {/* Video Views */}
-      {renderVideoViews()}
+      {/* Video Call */}
+      <VideoCallView
+        channelName={roomData.agoraChannel}
+        uid={parseInt(userId) || 0}
+        agoraAppId={roomData.agoraAppId || 'YOUR_AGORA_APP_ID'}
+        agoraToken={roomData.agoraToken || null}
+        style="floating"
+      />
 
       {/* Game Info */}
       {renderGameInfo()}
@@ -422,7 +309,15 @@ const TicTacToeScreen = ({ route, navigation }) => {
       </View>
 
       {/* Tic Tac Toe Board */}
-      {renderBoard()}
+      <GameBoard
+        board={board}
+        onCellPress={handleCellPress}
+        currentTurn={currentTurn}
+        myUserId={userId}
+        gameStatus={gameStatus}
+        winningLine={winningLine}
+        disabled={gameStatus !== 'active'}
+      />
 
       {/* Action Buttons */}
       {renderActionButtons()}
@@ -465,56 +360,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1a1a2e',
     padding: 20
-  },
-  videoContainer: {
-    position: 'relative',
-    width: '100%',
-    marginBottom: 20
-  },
-  localVideoContainer: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 100,
-    height: 150,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#4ECDC4',
-    zIndex: 10
-  },
-  localVideo: {
-    width: '100%',
-    height: '100%'
-  },
-  videoControls: {
-    position: 'absolute',
-    bottom: 5,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingVertical: 5
-  },
-  videoButton: {
-    padding: 5
-  },
-  videoButtonText: {
-    fontSize: 18
-  },
-  remoteVideoContainer: {
-    width: 100,
-    height: 150,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#FF6B6B',
-    alignSelf: 'flex-start'
-  },
-  remoteVideo: {
-    width: '100%',
-    height: '100%'
   },
   gameInfo: {
     flexDirection: 'row',
@@ -561,47 +406,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600'
-  },
-  boardContainer: {
-    alignItems: 'center',
-    marginVertical: 20
-  },
-  board: {
-    width: CELL_SIZE * 3 + 20,
-    height: CELL_SIZE * 3 + 20,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    backgroundColor: '#16213e',
-    borderRadius: 12,
-    padding: 10
-  },
-  cell: {
-    width: CELL_SIZE,
-    height: CELL_SIZE,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1a1a2e',
-    margin: 3,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#2a2a3e'
-  },
-  cellText: {
-    fontSize: 60,
-    fontWeight: 'bold'
-  },
-  xText: {
-    color: '#4ECDC4'
-  },
-  oText: {
-    color: '#FF6B6B'
-  },
-  winningCell: {
-    backgroundColor: '#FFD93D',
-    borderColor: '#FFD93D'
-  },
-  winningText: {
-    color: '#1a1a2e'
   },
   actionButtons: {
     flexDirection: 'row',

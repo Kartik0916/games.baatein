@@ -61,6 +61,7 @@ class SocketService {
       'gameStarted',
       'moveMade',
       'gameOver',
+      'gameRestarted',
       'chatMessage',
       'drawOffered',
       'error'
@@ -171,6 +172,10 @@ class SocketService {
 
   resign(roomId) {
     this.socket.emit('resign', { roomId });
+  }
+
+  restartGame(roomId) {
+    this.socket.emit('restartGame', { roomId });
   }
 
   disconnect() {
