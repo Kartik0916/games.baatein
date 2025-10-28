@@ -1,4 +1,4 @@
-// api/index.js - Vercel API route
+// api/index.js - Complete Vercel-compatible API
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -53,6 +53,7 @@ app.use(express.json());
 // Connect to MongoDB
 const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/baatein-games';
 console.log('🔗 Connecting to MongoDB:', mongoUri ? 'MongoDB Atlas' : 'Local MongoDB');
+
 mongoose.connect(mongoUri, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -60,22 +61,24 @@ mongoose.connect(mongoUri, {
 .then(() => console.log('✅ MongoDB Connected'))
 .catch(err => console.error('❌ MongoDB Error:', err));
 
-// Import Routes
-const gameRoutes = require('../routes/gameRoutes');
-const roomRoutes = require('../routes/roomRoutes');
-const userRoutes = require('../routes/userRoutes');
-
-app.use('/api/games', gameRoutes);
-app.use('/api/rooms', roomRoutes);
-app.use('/api/users', userRoutes);
-
 // Health Check
 app.get('/', (req, res) => {
   res.json({ 
     status: 'online',
     message: 'Baatein Tic Tac Toe Server',
     game: 'tic-tac-toe',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    version: '2.0'
+  });
+});
+
+// API Routes
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    activeRooms: activeRooms.size,
+    connectedUsers: userSockets.size
   });
 });
 
@@ -542,59 +545,11 @@ function endTicTacToeGame(room, result) {
     duration: room.startTime ? Math.floor((room.endTime - room.startTime) / 1000) : 0
   });
 
-  // Save game to database
-  saveGameToDatabase(room);
-
   // Clean up room after 2 minutes
   setTimeout(() => {
     activeRooms.delete(room.roomId);
     console.log(`🗑️ Room ${room.roomId} cleaned up`);
   }, 120000);
-}
-
-async function saveGameToDatabase(room) {
-  try {
-    const Game = require('../models/Game');
-    const User = require('../models/User');
-
-    const gameDoc = new Game({
-      roomId: room.roomId,
-      gameType: 'tic-tac-toe',
-      players: room.players.map(p => ({
-        userId: p.userId,
-        username: p.username,
-        symbol: p.symbol
-      })),
-      winner: room.winner,
-      moves: room.gameState.moves || [],
-      duration: room.startTime ? Math.floor((room.endTime - room.startTime) / 1000) : 0,
-      startTime: room.startTime,
-      endTime: room.endTime,
-      status: 'completed'
-    });
-
-    await gameDoc.save();
-
-    // Update user stats
-    for (let player of room.players) {
-      await User.findOneAndUpdate(
-        { userId: player.userId },
-        {
-          $inc: {
-            'stats.gamesPlayed': 1,
-            ...(room.winner === player.userId && { 'stats.gamesWon': 1 }),
-            ...(room.winner !== player.userId && room.winner !== 'draw' && { 'stats.gamesLost': 1 }),
-            ...(room.winner === 'draw' && { 'stats.gamesDraw': 1 })
-          }
-        },
-        { upsert: true }
-      );
-    }
-
-    console.log('💾 Tic Tac Toe game saved to database');
-  } catch (error) {
-    console.error('❌ Error saving game:', error);
-  }
 }
 
 function handlePlayerLeave(socket) {
