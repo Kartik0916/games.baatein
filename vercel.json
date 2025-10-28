@@ -2,25 +2,33 @@
   "version": 2,
   "builds": [
     {
-      "src": "baatein-games-backend/server.js",
-      "use": "@vercel/node"
+      "src": "api/index.js",
+      "use": "@vercel/node",
+      "config": {
+        "maxLambdaSize": "50mb"
+      }
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "baatein-games-backend/server.js"
+      "dest": "api/index.js"
     },
     {
       "src": "/socket.io/(.*)",
-      "dest": "baatein-games-backend/server.js"
+      "dest": "api/index.js"
     },
     {
       "src": "/(.*)",
-      "dest": "baatein-games-backend/server.js"
+      "dest": "api/index.js"
     }
   ],
   "env": {
     "NODE_ENV": "production"
+  },
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 30
+    }
   }
 }

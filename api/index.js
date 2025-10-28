@@ -1,4 +1,4 @@
-// server.js - Simplified Tic Tac Toe Server
+// api/index.js - Vercel API route
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -8,28 +8,42 @@ const cors = require('cors');
 // Load environment variables
 require('dotenv').config();
 
-console.log('🔧 Environment check:');
-console.log('MONGODB_URI:', process.env.MONGODB_URI);
-console.log('PORT:', process.env.PORT);
-console.log('NODE_ENV:', process.env.NODE_ENV);
-
 const app = express();
 const server = http.createServer(app);
+
+// Enhanced CORS configuration for Vercel
 const io = socketIo(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://localhost:5000", "http://127.0.0.1:3000", "http://127.0.0.1:5000", "https://games-baatein-frontend.vercel.app/", "*"],
+    origin: [
+      "http://localhost:3000", 
+      "http://localhost:5000", 
+      "http://127.0.0.1:3000", 
+      "http://127.0.0.1:5000", 
+      "https://games-baatein-frontend.vercel.app",
+      "https://games-baatein-frontend.vercel.app/",
+      "*"
+    ],
     methods: ["GET", "POST"],
     credentials: true,
     allowedHeaders: ["*"]
   },
   pingTimeout: 60000,
   pingInterval: 25000,
-  allowEIO3: true
+  allowEIO3: true,
+  transports: ['websocket', 'polling']
 });
 
 // Middleware
 app.use(cors({
-  origin: ["http://localhost:3000", "http://localhost:5000", "http://127.0.0.1:3000", "http://127.0.0.1:5000", "https://games-baatein-frontend.vercel.app/", "*"],
+  origin: [
+    "http://localhost:3000", 
+    "http://localhost:5000", 
+    "http://127.0.0.1:3000", 
+    "http://127.0.0.1:5000", 
+    "https://games-baatein-frontend.vercel.app",
+    "https://games-baatein-frontend.vercel.app/",
+    "*"
+  ],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"]
@@ -47,9 +61,9 @@ mongoose.connect(mongoUri, {
 .catch(err => console.error('❌ MongoDB Error:', err));
 
 // Import Routes
-const gameRoutes = require('./routes/gameRoutes');
-const roomRoutes = require('./routes/roomRoutes');
-const userRoutes = require('./routes/userRoutes');
+const gameRoutes = require('../routes/gameRoutes');
+const roomRoutes = require('../routes/roomRoutes');
+const userRoutes = require('../routes/userRoutes');
 
 app.use('/api/games', gameRoutes);
 app.use('/api/rooms', roomRoutes);
@@ -60,7 +74,8 @@ app.get('/', (req, res) => {
   res.json({ 
     status: 'online',
     message: 'Baatein Tic Tac Toe Server',
-    game: 'tic-tac-toe'
+    game: 'tic-tac-toe',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -539,8 +554,8 @@ function endTicTacToeGame(room, result) {
 
 async function saveGameToDatabase(room) {
   try {
-    const Game = require('./models/Game');
-    const User = require('./models/User');
+    const Game = require('../models/Game');
+    const User = require('../models/User');
 
     const gameDoc = new Game({
       roomId: room.roomId,
@@ -615,32 +630,5 @@ function handlePlayerLeave(socket) {
   }
 }
 
-// Vercel-compatible server setup
-const PORT = process.env.PORT || 4000;
-
-// For Vercel deployment
-if (process.env.NODE_ENV === 'production') {
-  // Export the app for Vercel
-  module.exports = app;
-} else {
-  // Local development
-  console.log('🚀 Starting Tic Tac Toe server on port:', PORT);
-  server.listen(PORT, () => {
-    console.log(`
-    ╔════════════════════════════════════════╗
-    ║  🎮 Baatein Tic Tac Toe Server       ║
-    ║  📡 Port: ${PORT}                        ║
-    ║  🎯 Game: 2-Player Tic Tac Toe        ║
-    ╚════════════════════════════════════════╝
-    `);
-  }).on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${PORT} is already in use. Trying port ${PORT + 1}...`);
-      server.listen(PORT + 1, () => {
-        console.log(`✅ Server started on port ${PORT + 1}`);
-      });
-    } else {
-      console.error('❌ Server error:', err);
-    }
-  });
-}
+// Export for Vercel
+module.exports = app;

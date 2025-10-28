@@ -2,10 +2,10 @@
   "name": "baatein-games",
   "version": "1.0.0",
   "description": "Baatein Games - Multiplayer Tic Tac Toe with Flutter WebView Integration",
-  "main": "baatein-games-backend/server.js",
+  "main": "api/index.js",
   "scripts": {
-    "start": "node baatein-games-backend/server.js",
-    "dev": "node baatein-games-backend/server.js",
+    "start": "node api/index.js",
+    "dev": "node api/index.js",
     "build": "echo 'No build step required'",
     "vercel-build": "echo 'No build step required'"
   },
