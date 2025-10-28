@@ -258,7 +258,7 @@ io.on('connection', (socket) => {
     try {
       const { roomId, move } = data;
       
-      if (!roomId || !move) {
+      if (!roomId || move === undefined || move === null) {
         socket.emit('error', { message: 'Room ID and move are required' });
         return;
       }
