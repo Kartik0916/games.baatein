@@ -1,20 +1,4 @@
-// app.js - Frontend JavaScript for Baatein Games Tic Tac Toe
-
-// Flutter WebView Communication Bridge
-function sendGameOverToFlutter(finalScore) {
-    // Safety check to ensure FlutterBridge is available
-    if (window.FlutterBridge) {
-        try {
-            window.FlutterBridge.postMessage('gameOver:' + finalScore);
-            console.log('📱 Game result sent to Flutter:', finalScore);
-        } catch (error) {
-            console.error('❌ Error sending message to Flutter:', error);
-        }
-    } else {
-        console.log('🔍 FlutterBridge not available - running outside mobile app');
-    }
-}
-
+// game.js - Complete Working Game Logic
 class BaateinGame {
     constructor() {
         this.socket = null;
@@ -59,8 +43,6 @@ class BaateinGame {
         this.gameBoard = document.getElementById('gameBoard');
         this.currentPlayerText = document.getElementById('currentPlayerText');
         this.gameStatus = document.getElementById('gameStatus');
-        this.offerDrawBtn = document.getElementById('offerDrawBtn');
-        this.resignBtn = document.getElementById('resignBtn');
         
         // Game over elements
         this.gameOver = document.getElementById('gameOver');
@@ -74,7 +56,6 @@ class BaateinGame {
         this.chatMessages = document.getElementById('chatMessages');
         this.chatInput = document.getElementById('chatInput');
         this.sendMessageBtn = document.getElementById('sendMessageBtn');
-        this.toggleChatBtn = document.getElementById('toggleChatBtn');
         
         // Other elements
         this.loadingOverlay = document.getElementById('loadingOverlay');
@@ -94,8 +75,6 @@ class BaateinGame {
         
         // Game controls
         this.readyBtn.addEventListener('click', () => this.markReady());
-        this.offerDrawBtn.addEventListener('click', () => this.offerDraw());
-        this.resignBtn.addEventListener('click', () => this.resign());
         
         // Game over actions
         this.playAgainBtn.addEventListener('click', () => this.playAgain());
@@ -139,7 +118,6 @@ class BaateinGame {
         this.showLoading('Connecting to server...');
         
         try {
-            // Generate a simple user ID (in production, this would come from authentication)
             const userId = 'user_' + Math.random().toString(36).substr(2, 9);
             
             this.user = {
@@ -148,7 +126,6 @@ class BaateinGame {
                 avatar
             };
             
-            // Connect to Socket.IO server
             await this.connectToServer();
             
             this.username.textContent = username;
@@ -165,15 +142,13 @@ class BaateinGame {
 
     connectToServer() {
         return new Promise((resolve, reject) => {
-            // Connect to your deployed backend server
             this.socket = io('https://games-baatein.vercel.app', {
                 transports: ['websocket', 'polling']
             });
             
             this.socket.on('connect', () => {
-                console.log('🔍 Debug - Connected to server');
+                console.log('🔍 Connected to server');
                 
-                // Authenticate with the server
                 this.socket.emit('authenticate', this.user);
                 
                 this.setupSocketListeners();
@@ -195,7 +170,7 @@ class BaateinGame {
     setupSocketListeners() {
         // Authentication
         this.socket.on('authenticated', (data) => {
-            console.log('🔍 Debug - Authenticated:', data);
+            console.log('🔍 Authenticated:', data);
         });
         
         // Room events
@@ -211,16 +186,13 @@ class BaateinGame {
         });
         
         this.socket.on('playerJoined', (data) => {
-            console.log('🔍 Debug - playerJoined event received:', data);
+            console.log('🔍 Player joined:', data);
             if (data.room) {
                 this.currentRoom = data.room;
-                console.log('🔍 Debug - currentRoom updated:', this.currentRoom);
-                this.showWaitingRoom(); // Add this to show the waiting room UI
+                this.showWaitingRoom();
                 this.updatePlayersList();
-                this.checkIfCanStart(); // Add this line to update the button state
+                this.checkIfCanStart();
                 this.showNotification(`${data.player.username} joined the room`, 'info');
-            } else {
-                console.error('Invalid playerJoined data:', data);
             }
         });
         
@@ -229,10 +201,8 @@ class BaateinGame {
             if (data.room) {
                 this.currentRoom = data.room;
                 this.updatePlayersList();
-                this.checkIfCanStart(); // Add this line to update the button state
+                this.checkIfCanStart();
                 this.showNotification(`${data.player.username} left the room`, 'warning');
-            } else {
-                console.error('Invalid playerLeft data:', data);
             }
         });
         
@@ -252,8 +222,6 @@ class BaateinGame {
                 this.showGameBoard();
                 this.updateGameStatus();
                 this.showNotification('Game started!', 'success');
-            } else {
-                console.error('Invalid gameStarted data:', data);
             }
         });
         
@@ -264,8 +232,6 @@ class BaateinGame {
                 this.currentRoom.currentTurn = data.currentTurn;
                 this.updateGameBoard();
                 this.updateGameStatus();
-            } else {
-                console.error('Invalid moveMade data:', data);
             }
         });
         
@@ -273,19 +239,6 @@ class BaateinGame {
             console.log('Game over:', data);
             if (data) {
                 this.showGameOver(data);
-            } else {
-                console.error('Invalid gameOver data:', data);
-            }
-        });
-        
-        this.socket.on('gameRestarted', (data) => {
-            console.log('Game restarted:', data);
-            if (data.room) {
-                this.currentRoom = data.room;
-                this.showWaitingRoom();
-                this.showNotification('Game restarted!', 'info');
-            } else {
-                console.error('Invalid gameRestarted data:', data);
             }
         });
         
@@ -293,23 +246,12 @@ class BaateinGame {
         this.socket.on('chatMessage', (data) => {
             if (data && data.username && data.message) {
                 this.addChatMessage(data);
-            } else {
-                console.error('Invalid chatMessage data:', data);
-            }
-        });
-        
-        // Draw events
-        this.socket.on('drawOffered', (data) => {
-            if (data && data.fromPlayer) {
-                this.showDrawOffer(data);
-            } else {
-                console.error('Invalid drawOffered data:', data);
             }
         });
         
         // Error handling
         this.socket.on('error', (data) => {
-            console.error('🔍 Debug - Socket error:', data);
+            console.error('🔍 Socket error:', data);
             this.showNotification(data.message || 'An error occurred', 'error');
         });
     }
@@ -326,7 +268,6 @@ class BaateinGame {
         }
         
         this.socket.emit('createRoom', {
-            gameType: 'tic-tac-toe',
             userId: this.user.userId,
             username: this.user.username,
             avatar: this.user.avatar
@@ -345,13 +286,6 @@ class BaateinGame {
 
     joinRoom() {
         const roomId = this.roomCodeInput.value.trim();
-        
-        console.log('🔍 Debug - joinRoom attempt:', {
-            roomId,
-            userId: this.user.userId,
-            username: this.user.username,
-            socketConnected: !!this.socket
-        });
         
         if (!roomId) {
             this.showNotification('Please enter a room code', 'error');
@@ -379,11 +313,6 @@ class BaateinGame {
     }
 
     showWaitingRoom() {
-        console.log('🔍 Debug - showWaitingRoom called:', {
-            currentRoom: this.currentRoom,
-            waitingRoomElement: this.waitingRoom
-        });
-        
         this.waitingRoom.style.display = 'block';
         this.gameBoardContainer.style.display = 'none';
         this.gameOver.style.display = 'none';
@@ -396,13 +325,6 @@ class BaateinGame {
 
     updatePlayersList(players = null) {
         const playersToShow = players || this.currentRoom.players;
-        
-        // Debug logging
-        console.log('🔍 Debug - updatePlayersList:', {
-            playersFromParam: players,
-            currentRoomPlayers: this.currentRoom.players,
-            playersToShow: playersToShow
-        });
         
         this.playersList.innerHTML = '';
         
@@ -425,14 +347,6 @@ class BaateinGame {
     checkIfCanStart() {
         const allReady = this.currentRoom.players.every(p => p.ready);
         const hasTwoPlayers = this.currentRoom.players.length === 2;
-        
-        // Debug logging
-        console.log('🔍 Debug - checkIfCanStart:', {
-            playersCount: this.currentRoom.players.length,
-            players: this.currentRoom.players.map(p => ({ username: p.username, ready: p.ready })),
-            allReady,
-            hasTwoPlayers
-        });
         
         this.readyBtn.disabled = !hasTwoPlayers;
         
@@ -553,13 +467,7 @@ class BaateinGame {
     }
 
     showGameOver(data) {
-        console.log('🔍 Debug - showGameOver called:', {
-            data,
-            currentUser: this.user.userId,
-            winner: data.winner,
-            isDraw: data.winner === 'draw',
-            isCurrentUserWinner: data.winner === this.user.userId
-        });
+        console.log('🔍 Game over:', data);
         
         this.gameBoardContainer.style.display = 'none';
         this.gameOver.style.display = 'block';
@@ -583,53 +491,18 @@ class BaateinGame {
         this.gameOverTitle.textContent = title;
         this.gameOverMessage.textContent = message;
         
-        // Highlight winning cells if there's a winner
-        if (data.winner && data.winner !== 'draw') {
-            this.highlightWinningCells();
-        }
-        
-        // Send game over message to Flutter using the dedicated function
-        // This is the main integration point for Flutter communication
+        // Send game over message to Flutter
         sendGameOverToFlutter(score);
-    }
-
-    highlightWinningCells() {
-        // This would highlight the winning line in tic-tac-toe
-        // Implementation depends on your backend returning winning positions
-        const cells = this.gameBoard.querySelectorAll('.cell');
-        cells.forEach(cell => {
-            if (cell.textContent) {
-                cell.classList.add('winning');
-            }
-        });
-    }
-
-    offerDraw() {
-        if (!this.socket || !this.currentRoom) return;
-        
-        this.socket.emit('offerDraw', {
-            roomId: this.currentRoom.roomId
-        });
-        
-        this.showNotification('Draw offer sent', 'info');
-    }
-
-    resign() {
-        if (!this.socket || !this.currentRoom) return;
-        
-        if (confirm('Are you sure you want to resign?')) {
-            this.socket.emit('resign', {
-                roomId: this.currentRoom.roomId
-            });
-        }
     }
 
     playAgain() {
         if (!this.socket || !this.currentRoom) return;
         
-        this.socket.emit('restartGame', {
-            roomId: this.currentRoom.roomId
-        });
+        // Reset game state
+        this.currentRoom.status = 'waiting';
+        this.currentRoom.players.forEach(player => player.ready = false);
+        this.showWaitingRoom();
+        this.showNotification('Game reset!', 'info');
     }
 
     leaveRoom() {
@@ -640,8 +513,6 @@ class BaateinGame {
         this.gameState = null;
         this.hideAllGameScreens();
         this.showNotification('Left the room', 'info');
-        
-        // TODO: Call sendGameOverToFlutter('left') here if needed when user leaves during game
     }
 
     hideAllGameScreens() {
@@ -680,16 +551,6 @@ class BaateinGame {
         this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
     }
 
-    showDrawOffer(data) {
-        const acceptDraw = confirm(`${data.fromPlayer || 'Opponent'} offered a draw. Do you accept?`);
-        
-        if (acceptDraw) {
-            this.socket.emit('acceptDraw', {
-                roomId: this.currentRoom.roomId
-            });
-        }
-    }
-
     handleLogout() {
         if (this.socket) {
             this.socket.disconnect();
@@ -702,8 +563,6 @@ class BaateinGame {
         this.showLoginScreen();
         this.hideAllGameScreens();
         this.showNotification('Logged out successfully', 'info');
-        
-        // TODO: Call sendGameOverToFlutter('logout') here if needed when user logs out during game
     }
 
     showNotification(message, type = 'info') {
@@ -713,7 +572,6 @@ class BaateinGame {
         
         this.notifications.appendChild(notification);
         
-        // Auto remove after 5 seconds
         setTimeout(() => {
             notification.remove();
         }, 5000);
@@ -726,6 +584,20 @@ class BaateinGame {
 
     hideLoading() {
         this.loadingOverlay.style.display = 'none';
+    }
+}
+
+// Flutter WebView Communication Bridge
+function sendGameOverToFlutter(finalScore) {
+    if (window.FlutterBridge) {
+        try {
+            window.FlutterBridge.postMessage('gameOver:' + finalScore);
+            console.log('📱 Game result sent to Flutter:', finalScore);
+        } catch (error) {
+            console.error('❌ Error sending message to Flutter:', error);
+        }
+    } else {
+        console.log('🔍 FlutterBridge not available - running outside mobile app');
     }
 }
 

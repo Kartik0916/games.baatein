@@ -12,6 +12,7 @@ class GameWebViewScreen extends StatefulWidget {
 class _GameWebViewScreenState extends State<GameWebViewScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -30,9 +31,21 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
       )
       ..setNavigationDelegate(
         NavigationDelegate(
+          onPageStarted: (String url) {
+            setState(() {
+              _isLoading = true;
+              _errorMessage = null;
+            });
+          },
           onPageFinished: (String url) {
             setState(() {
               _isLoading = false;
+            });
+          },
+          onWebResourceError: (WebResourceError error) {
+            setState(() {
+              _isLoading = false;
+              _errorMessage = 'Failed to load game: ${error.description}';
             });
           },
         ),
@@ -50,11 +63,10 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
       );
     } catch (e) {
       debugPrint('Error loading game: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading game: $e')),
-        );
-      }
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Error loading game: $e';
+      });
     }
   }
 
@@ -71,6 +83,13 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
     }
   }
 
+  void _retryLoad() {
+    setState(() {
+      _errorMessage = null;
+    });
+    _loadGame();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -81,13 +100,64 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _retryLoad,
+            tooltip: 'Reload Game',
+          ),
+        ],
       ),
       body: Stack(
         children: [
-          WebViewWidget(controller: _controller),
-          if (_isLoading)
-            const Center(
-              child: CircularProgressIndicator(),
+          if (_errorMessage != null)
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Colors.red,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Game Loading Error',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      _errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: _retryLoad,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+          else
+            WebViewWidget(controller: _controller),
+          if (_isLoading && _errorMessage == null)
+            Container(
+              color: Colors.white,
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Loading Game...'),
+                  ],
+                ),
+              ),
             ),
         ],
       ),
