@@ -1,22 +1,41 @@
 {
-  "name": "games.baatein",
+  "name": "baatein-games",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Baatein Games - Multiplayer Tic Tac Toe with Flutter WebView Integration",
+  "main": "baatein-games-backend/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node baatein-games-backend/server.js",
+    "dev": "node baatein-games-backend/server.js",
+    "build": "echo 'No build step required'",
+    "vercel-build": "echo 'No build step required'"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "tic-tac-toe",
+    "multiplayer",
+    "socket.io",
+    "flutter",
+    "webview",
+    "real-time",
+    "games"
+  ],
+  "author": "Baatein Games",
+  "license": "MIT",
   "dependencies": {
-    "agora-access-token": "^2.0.4",
-    "bcrypt": "^6.0.0",
+    "express": "^4.18.2",
+    "socket.io": "^4.8.1",
+    "mongoose": "^8.0.3",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.19.1",
-    "socket.io": "^4.8.1"
-  }
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/baatein-games.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/baatein-games/issues"
+  },
+  "homepage": "https://github.com/your-username/baatein-games#readme"
 }

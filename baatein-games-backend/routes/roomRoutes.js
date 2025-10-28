@@ -1,71 +1,23 @@
 // ===== routes/roomRoutes.js =====
-// Room routes for API endpoints
+// Tic Tac Toe Room Routes
 
 const express = require('express');
 const router = express.Router();
-const Room = require('../models/GameRoom');
+const roomController = require('../controllers/roomController');
 
-// Get all active rooms
-router.get('/active', async (req, res) => {
-  try {
-    const rooms = await Room.find({ status: 'waiting' })
-      .select('roomId gameType players createdAt')
-      .sort({ createdAt: -1 })
-      .limit(20);
+// Create a new Tic Tac Toe room
+router.post('/create', roomController.createRoom);
 
-    res.json({
-      success: true,
-      rooms: rooms.map(room => ({
-        roomId: room.roomId,
-        gameType: room.gameType,
-        playerCount: room.players.length,
-        createdAt: room.createdAt
-      }))
-    });
-  } catch (error) {
-    console.error('❌ Error getting active rooms:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get active rooms',
-      error: error.message
-    });
-  }
-});
+// Join a Tic Tac Toe room
+router.post('/:roomId/join', roomController.joinRoom);
+
+// Leave a Tic Tac Toe room
+router.post('/:roomId/leave', roomController.leaveRoom);
+
+// Get all active Tic Tac Toe rooms
+router.get('/active', roomController.getActiveRooms);
 
 // Get room by ID
-router.get('/:roomId', async (req, res) => {
-  try {
-    const { roomId } = req.params;
-    const room = await Room.findOne({ roomId });
-
-    if (!room) {
-      return res.status(404).json({
-        success: false,
-        message: 'Room not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      room: {
-        roomId: room.roomId,
-        gameType: room.gameType,
-        players: room.players,
-        status: room.status,
-        gameState: room.gameState,
-        currentTurn: room.currentTurn,
-        agoraChannel: room.agoraChannel,
-        createdAt: room.createdAt
-      }
-    });
-  } catch (error) {
-    console.error('❌ Error getting room:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get room',
-      error: error.message
-    });
-  }
-});
+router.get('/:roomId', roomController.getRoomById);
 
 module.exports = router;

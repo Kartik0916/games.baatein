@@ -1,5 +1,5 @@
 // ===== routes/gameRoutes.js =====
-// Game routes for API endpoints
+// Tic Tac Toe Game Routes
 
 const express = require('express');
 const router = express.Router();
@@ -15,5 +15,6 @@ router.post('/tic-tac-toe/restart', gameController.restartTicTacToeGame);
 router.get('/room/:roomId', gameController.getGameRoom);
 router.get('/history/:userId', gameController.getUserGameHistory);
 router.get('/stats/:userId', gameController.getUserStats);
+router.get('/top-players', gameController.getTopPlayers);
 
 module.exports = router;

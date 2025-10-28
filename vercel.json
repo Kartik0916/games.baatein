@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "baatein-games-backend/server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "baatein-games-backend/server.js"
+    },
+    {
+      "src": "/socket.io/(.*)",
+      "dest": "baatein-games-backend/server.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "baatein-games-backend/server.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}

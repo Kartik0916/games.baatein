@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baatein Games - Tic Tac Toe</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">
+                    <i class="fas fa-gamepad"></i>
+                    Baatein Games
+                </h1>
+                <div class="user-info" id="userInfo" style="display: none;">
+                    <span class="username" id="username"></span>
+                    <button class="btn btn-secondary" id="logoutBtn">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Login Screen -->
+            <div class="login-screen" id="loginScreen">
+                <div class="login-container">
+                    <div class="login-card">
+                        <h2>Welcome to Baatein Games</h2>
+                        <p>Enter your details to start playing Tic Tac Toe</p>
+                        
+                        <form class="login-form" id="loginForm">
+                            <div class="form-group">
+                                <label for="usernameInput">Username</label>
+                                <input type="text" id="usernameInput" placeholder="Enter your username" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="avatarSelect">Choose Avatar</label>
+                                <div class="avatar-grid">
+                                    <input type="radio" name="avatar" value="😀" id="avatar1" checked>
+                                    <label for="avatar1">😀</label>
+                                    
+                                    <input type="radio" name="avatar" value="😎" id="avatar2">
+                                    <label for="avatar2">😎</label>
+                                    
+                                    <input type="radio" name="avatar" value="🤖" id="avatar3">
+                                    <label for="avatar3">🤖</label>
+                                    
+                                    <input type="radio" name="avatar" value="🎮" id="avatar4">
+                                    <label for="avatar4">🎮</label>
+                                    
+                                    <input type="radio" name="avatar" value="🔥" id="avatar5">
+                                    <label for="avatar5">🔥</label>
+                                    
+                                    <input type="radio" name="avatar" value="⭐" id="avatar6">
+                                    <label for="avatar6">⭐</label>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary btn-large">
+                                <i class="fas fa-play"></i>
+                                Start Playing
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Game Screen -->
+            <div class="game-screen" id="gameScreen" style="display: none;">
+                <!-- Room Management -->
+                <div class="room-section">
+                    <div class="room-controls">
+                        <button class="btn btn-primary" id="createRoomBtn">
+                            <i class="fas fa-plus"></i>
+                            Create Room
+                        </button>
+                        <button class="btn btn-secondary" id="joinRoomBtn">
+                            <i class="fas fa-sign-in-alt"></i>
+                            Join Room
+                        </button>
+                    </div>
+                    
+                    <!-- Room Code Input -->
+                    <div class="room-input" id="roomInput" style="display: none;">
+                        <div class="input-group">
+                            <input type="text" id="roomCodeInput" placeholder="Enter room code">
+                            <button class="btn btn-primary" id="joinWithCodeBtn">Join</button>
+                            <button class="btn btn-secondary" id="cancelJoinBtn">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Game Area -->
+                <div class="game-area">
+                    <!-- Waiting Room -->
+                    <div class="waiting-room" id="waitingRoom" style="display: none;">
+                        <div class="waiting-content">
+                            <h3>Waiting for Players</h3>
+                            <div class="room-info">
+                                <p><strong>Room Code:</strong> <span id="roomCode"></span></p>
+                                <p><strong>Game:</strong> Tic Tac Toe</p>
+                            </div>
+                            
+                            <div class="players-list" id="playersList">
+                                <!-- Players will be added here -->
+                            </div>
+                            
+                            <div class="ready-section">
+                                <button class="btn btn-success btn-large" id="readyBtn" disabled>
+                                    <i class="fas fa-check"></i>
+                                    Ready to Play
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Game Board -->
+                    <div class="game-board-container" id="gameBoardContainer" style="display: none;">
+                        <div class="game-info">
+                            <div class="current-player">
+                                <span id="currentPlayerText">Your turn</span>
+                            </div>
+                            <div class="game-controls">
+                                <button class="btn btn-warning" id="offerDrawBtn">
+                                    <i class="fas fa-handshake"></i>
+                                    Offer Draw
+                                </button>
+                                <button class="btn btn-danger" id="resignBtn">
+                                    <i class="fas fa-flag"></i>
+                                    Resign
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="tic-tac-toe-board" id="gameBoard">
+                            <!-- 3x3 grid will be generated by JavaScript -->
+                        </div>
+
+                        <div class="game-status" id="gameStatus">
+                            <!-- Game status messages -->
+                        </div>
+                    </div>
+
+                    <!-- Game Over Screen -->
+                    <div class="game-over" id="gameOver" style="display: none;">
+                        <div class="game-over-content">
+                            <h2 id="gameOverTitle">Game Over!</h2>
+                            <p id="gameOverMessage"></p>
+                            <div class="game-over-actions">
+                                <button class="btn btn-primary" id="playAgainBtn">
+                                    <i class="fas fa-redo"></i>
+                                    Play Again
+                                </button>
+                                <button class="btn btn-secondary" id="leaveRoomBtn">
+                                    <i class="fas fa-sign-out-alt"></i>
+                                    Leave Room
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Section -->
+                <div class="chat-section" id="chatSection" style="display: none;">
+                    <div class="chat-header">
+                        <h4>Chat</h4>
+                        <button class="btn btn-sm btn-secondary" id="toggleChatBtn">
+                            <i class="fas fa-comments"></i>
+                        </button>
+                    </div>
+                    <div class="chat-messages" id="chatMessages">
+                        <!-- Chat messages will be added here -->
+                    </div>
+                    <div class="chat-input">
+                        <input type="text" id="chatInput" placeholder="Type a message...">
+                        <button class="btn btn-primary" id="sendMessageBtn">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Notifications -->
+        <div class="notifications" id="notifications"></div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+            <div class="loading-spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Connecting...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
