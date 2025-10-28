@@ -38,7 +38,7 @@ app.use(express.json());
 
 // Connect to MongoDB
 const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/baatein-games';
-console.log('🔗 Connecting to MongoDB:', mongoUri);
+console.log('🔗 Connecting to MongoDB:', mongoUri ? 'MongoDB Atlas' : 'Local MongoDB');
 mongoose.connect(mongoUri, {
   useNewUrlParser: true,
   useUnifiedTopology: true

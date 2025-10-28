@@ -165,8 +165,8 @@ class BaateinGame {
 
     connectToServer() {
         return new Promise((resolve, reject) => {
-            // Connect to your backend server (adjust URL as needed)
-            this.socket = io('http://localhost:4000', {
+            // Connect to your deployed backend server
+            this.socket = io('https://games-baatein.vercel.app', {
                 transports: ['websocket', 'polling']
             });
             

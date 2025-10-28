@@ -29,6 +29,11 @@ The `pubspec.yaml` file includes:
 
 ### 2. Backend Setup
 
+**Production URLs:**
+- Frontend: https://games-baatein-frontend.vercel.app/
+- Backend: https://games-baatein.vercel.app/
+
+**For Local Development:**
 1. Navigate to the backend directory:
    ```bash
    cd baatein-games-backend

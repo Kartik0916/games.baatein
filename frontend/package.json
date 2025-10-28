@@ -28,10 +28,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kartik0916/baatein-games-frontend.git"
+    "url": "https://github.com/Kartik0916/games.baatein.git"
   },
   "bugs": {
-    "url": "https://github.com/Kartik0916/baatein-games-frontend/issues"
+    "url": "https://github.com/Kartik0916/games.baatein/issues"
   },
-  "homepage": "https://github.com/Kartik0916/baatein-games-frontend#readme"
+  "homepage": "https://github.com/Kartik0916/games.baatein#readme"
 }

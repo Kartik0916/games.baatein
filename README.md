@@ -38,12 +38,16 @@ A real-time multiplayer Tic Tac Toe game with Flutter WebView integration, built
 npm install
 
 # Set environment variables
-cp .env.example .env
+cp env.template .env
 # Edit .env with your MongoDB URI
 
 # Start development server
 npm run dev
 ```
+
+### Production URLs
+- **Frontend**: https://games-baatein-frontend.vercel.app/
+- **Backend API**: https://games-baatein.vercel.app/
 
 ### Flutter Setup
 ```bash
