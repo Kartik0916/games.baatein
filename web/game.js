@@ -259,6 +259,9 @@ class BaateinGame {
         this.socket.on('gameOver', (data) => {
             console.log('🎯 Game Over received:', data);
             
+            // Clear any previous animations first
+            this.clearAllAnimations();
+            
             // Add winning line animation if there's a winner
             if (data.winner && data.winner !== 'draw' && data.winningLine) {
                 console.log('🎯 Drawing winning line:', data.winningLine);
@@ -271,13 +274,13 @@ class BaateinGame {
                     console.log('🎯 Creating fireworks for winner');
                     setTimeout(() => {
                         this.createFireworks();
-                    }, 1200); // After line animation (1s line + 0.2s delay)
+                    }, 800); // Faster - reduced from 1200ms to 800ms
                 }
                 
-                // Delay showing game over screen to see the line
+                // Delay showing game over screen to see the line (shorter delay)
                 setTimeout(() => {
                     this.showGameOver(data);
-                }, 1500); // Give time for line animation (1s) + buffer
+                }, 1100); // Reduced from 1500ms to 1100ms for faster transition
             } else {
                 // No winner or draw - show immediately
                 this.showGameOver(data);
@@ -407,6 +410,10 @@ class BaateinGame {
         
         this.socket.on('gameReset', (data) => {
             console.log('🔍 Game reset:', data);
+            
+            // CRITICAL: Clean up all animations BEFORE resetting
+            this.clearAllAnimations();
+            
             if (data.room) {
                 // Update room and game state with fresh copy
                 this.currentRoom = {
@@ -432,7 +439,15 @@ class BaateinGame {
                 if (this.gameBoardContainer) {
                     const cells = this.gameBoardContainer.querySelectorAll('.cell');
                     cells.forEach(cell => cell.remove());
+                    
+                    // Remove all winning lines
+                    const winningLines = this.gameBoardContainer.querySelectorAll('.winning-line');
+                    winningLines.forEach(line => line.remove());
                 }
+                
+                // Remove winning class from any cells
+                const winningCells = document.querySelectorAll('.cell.winning');
+                winningCells.forEach(cell => cell.classList.remove('winning'));
                 
                 // Explicitly hide all game-related screens
                 this.gameOver.style.display = 'none';
@@ -508,6 +523,9 @@ class BaateinGame {
     }
 
     showWaitingRoom() {
+        // CRITICAL: Clean up all animations when entering waiting room
+        this.clearAllAnimations();
+        
         // Force hide game screens first
         this.gameOver.style.display = 'none';
         if (this.gameBoardContainer) {
@@ -516,12 +534,20 @@ class BaateinGame {
             // Aggressively remove all cells
             const allCells = this.gameBoardContainer.querySelectorAll('.cell');
             allCells.forEach(cell => cell.remove());
+            
+            // Remove all winning lines
+            const winningLines = this.gameBoardContainer.querySelectorAll('.winning-line');
+            winningLines.forEach(line => line.remove());
         }
         
         // Clear game board HTML completely
         if (this.gameBoard) {
             this.gameBoard.innerHTML = '';
         }
+        
+        // Remove winning class from any remaining cells
+        const winningCells = document.querySelectorAll('.cell.winning');
+        winningCells.forEach(cell => cell.classList.remove('winning'));
         
         // Disable draw and resign buttons when in waiting room
         if (this.offerDrawBtn) {
@@ -814,7 +840,7 @@ class BaateinGame {
                 if (this.gameBoardContainer) {
                     this.gameBoardContainer.style.display = 'none';
                 }
-            }, 2000);
+            }, 1800); // Reduced from 2000ms for faster transition
         }
         
         this.gameOver.style.display = 'block';
@@ -829,8 +855,16 @@ class BaateinGame {
         
         let title, message, score, isWin = false;
         
-        // Remove previous classes
-        this.gameOverContent.classList.remove('won', 'lost');
+        // Remove previous classes and clean up old animations
+        if (this.gameOverContent) {
+            this.gameOverContent.classList.remove('won', 'lost');
+            
+            // Remove any existing crying face container
+            const existingCryingFace = this.gameOverContent.querySelector('.crying-face-container');
+            if (existingCryingFace) {
+                existingCryingFace.remove();
+            }
+        }
         
         if (data.winner === 'draw') {
             title = 'Game Draw!';
@@ -860,10 +894,10 @@ class BaateinGame {
             score = 'loss';
             this.gameOverContent.classList.add('lost');
             
-            // Add crying face animation for loss
+            // Add crying face animation for loss (reduced delay)
             setTimeout(() => {
                 this.addCryingFace();
-            }, 500);
+            }, 300); // Faster: 500ms -> 300ms
         }
         
         this.gameOverTitle.textContent = title;
@@ -1216,10 +1250,10 @@ class BaateinGame {
         const centerY = boardRect ? boardRect.top + boardRect.height / 2 : window.innerHeight / 2;
         
         const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffa500'];
-        const particleCount = 100;
+        const particleCount = 60; // Reduced from 100 for better performance
         
-        // Create multiple firework bursts
-        for (let burst = 0; burst < 5; burst++) {
+        // Create multiple firework bursts (reduced for performance)
+        for (let burst = 0; burst < 3; burst++) { // Reduced from 5 to 3 bursts
             setTimeout(() => {
                 for (let i = 0; i < particleCount; i++) {
                     const particle = document.createElement('div');
@@ -1249,8 +1283,8 @@ class BaateinGame {
             }, burst * 300);
         }
         
-        // Create confetti falling from top
-        for (let i = 0; i < 50; i++) {
+        // Create confetti falling from top (reduced for performance)
+        for (let i = 0; i < 30; i++) { // Reduced from 50 to 30
             setTimeout(() => {
                 const confetti = document.createElement('div');
                 confetti.className = 'confetti';
@@ -1294,14 +1328,15 @@ class BaateinGame {
         container.className = 'crying-face-container';
         container.style.position = 'relative';
         container.style.display = 'inline-block';
+        container.style.marginBottom = '1rem'; /* Add spacing below */
         
         const face = document.createElement('span');
         face.className = 'crying-face';
         face.textContent = '😢';
         container.appendChild(face);
         
-        // Add tears
-        for (let i = 0; i < 6; i++) {
+        // Add tears (reduced for performance)
+        for (let i = 0; i < 4; i++) { // Reduced from 6 to 4
             const tear = document.createElement('div');
             tear.className = 'tear';
             tear.style.left = `${20 + i * 15}%`;
@@ -1310,12 +1345,14 @@ class BaateinGame {
             container.appendChild(tear);
         }
         
-        // Insert before title
+        // Insert before title with proper spacing
         if (this.gameOverTitle && this.gameOverTitle.parentNode) {
             this.gameOverTitle.parentNode.insertBefore(container, this.gameOverTitle);
+            // Ensure title has margin-top to avoid overlap
+            this.gameOverTitle.style.marginTop = '1rem';
         }
         
-        // Keep tears falling
+        // Keep tears falling (reduced frequency for performance)
         const tearInterval = setInterval(() => {
             // Add new tear periodically
             const newTear = document.createElement('div');
@@ -1328,13 +1365,54 @@ class BaateinGame {
                 if (newTear.parentNode) {
                     newTear.remove();
                 }
-            }, 1500);
-        }, 500);
+            }, 1200); // Faster: 1500ms -> 1200ms
+        }, 800); // Less frequent: 500ms -> 800ms
         
-        // Stop tears when screen changes
+        // Stop tears when screen changes (shorter duration)
         setTimeout(() => {
             clearInterval(tearInterval);
-        }, 5000);
+        }, 3000); // Reduced from 5000ms to 3000ms
+    }
+    
+    // Clear all animations - CRITICAL for preventing animation buildup
+    clearAllAnimations() {
+        console.log('🧹 Clearing all animations');
+        
+        // Remove fireworks container
+        const fireworksContainer = document.querySelector('.fireworks-container');
+        if (fireworksContainer) {
+            fireworksContainer.remove();
+        }
+        
+        // Remove all firework particles
+        const fireworks = document.querySelectorAll('.firework');
+        fireworks.forEach(fw => fw.remove());
+        
+        // Remove all confetti
+        const confetti = document.querySelectorAll('.confetti');
+        confetti.forEach(c => c.remove());
+        
+        // Remove winning lines
+        const winningLines = document.querySelectorAll('.winning-line');
+        winningLines.forEach(line => line.remove());
+        
+        // Remove crying face container
+        if (this.gameOverContent) {
+            const cryingFace = this.gameOverContent.querySelector('.crying-face-container');
+            if (cryingFace) {
+                cryingFace.remove();
+            }
+        }
+        
+        // Remove winning class from cells
+        const winningCells = document.querySelectorAll('.cell.winning');
+        winningCells.forEach(cell => cell.classList.remove('winning'));
+        
+        // Remove move animation classes
+        const moveAnimatedCells = document.querySelectorAll('.cell.move-animation');
+        moveAnimatedCells.forEach(cell => cell.classList.remove('move-animation'));
+        
+        console.log('🧹 All animations cleared');
     }
 }
 
