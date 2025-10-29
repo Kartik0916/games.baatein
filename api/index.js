@@ -106,9 +106,6 @@ function initializeGame() {
 // Socket.IO Events
 io.on('connection', (socket) => {
   console.log('🔌 Client connected:', socket.id);
-  
-  // Set connection timeout
-  socket.setTimeout(30000); // 30 seconds timeout
 
   // Authentication
   socket.on('authenticate', (data) => {
