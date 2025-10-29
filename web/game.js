@@ -179,10 +179,12 @@ class BaateinGame {
         });
         
         this.socket.on('gameStarted', (data) => {
-            if (data.gameState) {
+            if (data.gameState && data.gameState.board) {
                 this.gameState = data.gameState;
-                this.currentRoom.status = 'active';
-                this.currentRoom.currentTurn = data.currentTurn;
+                if (this.currentRoom) {
+                    this.currentRoom.status = 'active';
+                    this.currentRoom.currentTurn = data.currentTurn;
+                }
                 this.showGameBoard();
                 this.updateGameStatus();
                 this.showNotification('Game started!', 'success');
@@ -230,12 +232,20 @@ class BaateinGame {
         this.socket.on('gameReset', (data) => {
             console.log('🔍 Game reset:', data);
             if (data.room) {
+                // Update room and game state
                 this.currentRoom = data.room;
                 this.gameState = data.room.gameState;
                 
-                // Hide game over screen and show waiting room
+                // Force clear the game board HTML
+                if (this.gameBoard) {
+                    this.gameBoard.innerHTML = '';
+                }
+                
+                // Explicitly hide all game-related screens
                 this.gameOver.style.display = 'none';
                 this.gameBoardContainer.style.display = 'none';
+                
+                // Ensure waiting room is shown
                 this.showWaitingRoom();
                 
                 // Reset play again button
@@ -244,7 +254,12 @@ class BaateinGame {
                     this.playAgainBtn.innerHTML = '<i class="fas fa-redo"></i> Play Again';
                 }
                 
-                this.showNotification(data.message || 'Game reset!', 'success');
+                // Clear any turn indicators
+                if (this.currentPlayerText) {
+                    this.currentPlayerText.textContent = '';
+                }
+                
+                this.showNotification(data.message || 'Game reset! Both players need to mark ready.', 'success');
             }
         });
         
@@ -295,11 +310,30 @@ class BaateinGame {
     }
 
     showWaitingRoom() {
-        this.waitingRoom.style.display = 'block';
-        this.gameBoardContainer.style.display = 'none';
+        // Force hide game screens first
         this.gameOver.style.display = 'none';
+        this.gameBoardContainer.style.display = 'none';
+        
+        // Show waiting room
+        this.waitingRoom.style.display = 'block';
         this.chatSection.style.display = 'block';
-        this.roomCode.textContent = this.currentRoom.roomId;
+        
+        // Update room code if room exists
+        if (this.currentRoom && this.currentRoom.roomId) {
+            this.roomCode.textContent = this.currentRoom.roomId;
+        }
+        
+        // Clear game board HTML
+        if (this.gameBoard) {
+            this.gameBoard.innerHTML = '';
+        }
+        
+        // Reset turn indicator
+        if (this.currentPlayerText) {
+            this.currentPlayerText.textContent = '';
+        }
+        
+        // Update players list
         this.updatePlayersList();
         this.checkIfCanStart();
     }
@@ -350,6 +384,12 @@ class BaateinGame {
     }
 
     showGameBoard() {
+        // Only show game board if game is actually active
+        if (!this.currentRoom || this.currentRoom.status !== 'active') {
+            console.warn('Cannot show game board - game not active');
+            return;
+        }
+        
         this.waitingRoom.style.display = 'none';
         this.gameBoardContainer.style.display = 'block';
         this.gameOver.style.display = 'none';
@@ -358,13 +398,28 @@ class BaateinGame {
     }
 
     createGameBoard() {
+        // Clear existing board
         this.gameBoard.innerHTML = '';
         
+        // Ensure we have valid game state
+        if (!this.gameState || !this.gameState.board || !Array.isArray(this.gameState.board)) {
+            console.error('Invalid game state for creating board');
+            return;
+        }
+        
+        // Only create board if game is active
+        if (!this.currentRoom || this.currentRoom.status !== 'active') {
+            console.warn('Cannot create board - game not active');
+            return;
+        }
+        
+        // Create 9 cells for the board
         for (let i = 0; i < 9; i++) {
             const cell = document.createElement('div');
             cell.className = 'cell';
             cell.dataset.index = i;
             
+            // Only show marks if board has values
             if (this.gameState.board[i]) {
                 cell.textContent = this.gameState.board[i];
                 cell.classList.add('occupied', this.gameState.board[i].toLowerCase());
@@ -395,13 +450,33 @@ class BaateinGame {
             return;
         }
         
-        if (this.currentRoom.status !== 'active') {
+        // Strict check: only allow moves if game is active
+        if (!this.currentRoom.status || this.currentRoom.status !== 'active') {
             this.showNotification('Game is not active. Please wait for the game to start.', 'warning');
+            // Also ensure board is hidden if game is not active
+            if (this.gameBoardContainer && this.currentRoom.status === 'waiting') {
+                this.gameBoardContainer.style.display = 'none';
+                if (this.waitingRoom) {
+                    this.waitingRoom.style.display = 'block';
+                }
+            }
+            return;
+        }
+        
+        // Check if game board is actually visible
+        if (this.gameBoardContainer && this.gameBoardContainer.style.display === 'none') {
+            // Board shouldn't be clickable if hidden, but just in case
             return;
         }
         
         if (!this.gameState || !this.gameState.board) {
             this.showNotification('Game state not ready', 'error');
+            return;
+        }
+        
+        // Check if game is over
+        if (this.gameState.gameOver) {
+            this.showNotification('Game is over. Please reset to play again.', 'warning');
             return;
         }
         
