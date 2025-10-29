@@ -117,8 +117,6 @@ unlinked_spec.ds
 **/ios/Flutter/Generated.xcconfig
 **/ios/ios/Runner/GeneratedPluginRegistrant.*
 
-# Web related
-**/web/
 
 # Symbolication related
 app.*.symbols
