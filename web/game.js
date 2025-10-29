@@ -40,6 +40,7 @@ class BaateinGame {
         this.gameOver = document.getElementById('gameOver');
         this.gameOverTitle = document.getElementById('gameOverTitle');
         this.gameOverMessage = document.getElementById('gameOverMessage');
+        this.gameOverContent = document.querySelector('.game-over-content');
         this.playAgainBtn = document.getElementById('playAgainBtn');
         this.leaveRoomBtn = document.getElementById('leaveRoomBtn');
         this.chatSection = document.getElementById('chatSection');
@@ -256,7 +257,31 @@ class BaateinGame {
         });
         
         this.socket.on('gameOver', (data) => {
-            this.showGameOver(data);
+            console.log('🎯 Game Over received:', data);
+            
+            // Add winning line animation if there's a winner
+            if (data.winner && data.winner !== 'draw' && data.winningLine) {
+                console.log('🎯 Drawing winning line:', data.winningLine);
+                
+                // Draw line BEFORE hiding the board
+                this.drawWinningLine(data.winningLine);
+                
+                // Show fireworks only if this player won
+                if (data.winner === this.user.userId) {
+                    console.log('🎯 Creating fireworks for winner');
+                    setTimeout(() => {
+                        this.createFireworks();
+                    }, 1200); // After line animation (1s line + 0.2s delay)
+                }
+                
+                // Delay showing game over screen to see the line
+                setTimeout(() => {
+                    this.showGameOver(data);
+                }, 1500); // Give time for line animation (1s) + buffer
+            } else {
+                // No winner or draw - show immediately
+                this.showGameOver(data);
+            }
         });
         
         // Draw offer events
@@ -654,6 +679,13 @@ class BaateinGame {
             if (this.gameState.board[i]) {
                 cell.textContent = this.gameState.board[i];
                 cell.classList.add('occupied', this.gameState.board[i].toLowerCase());
+                // Add smooth animation for existing moves
+                setTimeout(() => {
+                    cell.classList.add('move-animation');
+                    setTimeout(() => {
+                        cell.classList.remove('move-animation');
+                    }, 300);
+                }, i * 50); // Stagger animation
             }
             
             cell.addEventListener('click', () => this.makeMove(i));
@@ -679,13 +711,20 @@ class BaateinGame {
         cells.forEach((cell, index) => {
             const value = this.gameState.board[index];
             if (value) {
+                // Add smooth animation when updating
+                if (!cell.classList.contains('occupied')) {
+                    cell.classList.add('move-animation');
+                    setTimeout(() => {
+                        cell.classList.remove('move-animation');
+                    }, 300);
+                }
                 cell.textContent = value;
                 cell.classList.add('occupied', value.toLowerCase());
                 cell.classList.remove('x', 'o');
                 cell.classList.add(value.toLowerCase());
             } else {
                 cell.textContent = '';
-                cell.classList.remove('occupied', 'x', 'o');
+                cell.classList.remove('occupied', 'x', 'o', 'winning', 'move-animation');
             }
         });
     }
@@ -765,7 +804,19 @@ class BaateinGame {
     }
 
     showGameOver(data) {
-        this.gameBoardContainer.style.display = 'none';
+        // Don't hide board immediately if there's a winning line animation
+        // Keep it visible until animation completes
+        if (!data.winner || data.winner === 'draw' || !data.winningLine) {
+            this.gameBoardContainer.style.display = 'none';
+        } else {
+            // Hide board after a delay to allow line animation to be seen
+            setTimeout(() => {
+                if (this.gameBoardContainer) {
+                    this.gameBoardContainer.style.display = 'none';
+                }
+            }, 2000);
+        }
+        
         this.gameOver.style.display = 'block';
         
         // Disable draw and resign buttons when game is over
@@ -776,7 +827,10 @@ class BaateinGame {
             this.resignBtn.disabled = true;
         }
         
-        let title, message, score;
+        let title, message, score, isWin = false;
+        
+        // Remove previous classes
+        this.gameOverContent.classList.remove('won', 'lost');
         
         if (data.winner === 'draw') {
             title = 'Game Draw!';
@@ -788,12 +842,14 @@ class BaateinGame {
             score = 'draw';
         } else if (data.winner === this.user.userId) {
             title = 'You Won!';
+            isWin = true;
             if (data.reason === 'resignation') {
                 message = 'Congratulations! Your opponent resigned. You win!';
             } else {
                 message = 'Congratulations! You won the game.';
             }
             score = 'win';
+            this.gameOverContent.classList.add('won');
         } else {
             title = 'You Lost!';
             if (data.reason === 'resignation') {
@@ -802,6 +858,12 @@ class BaateinGame {
                 message = 'Better luck next time!';
             }
             score = 'loss';
+            this.gameOverContent.classList.add('lost');
+            
+            // Add crying face animation for loss
+            setTimeout(() => {
+                this.addCryingFace();
+            }, 500);
         }
         
         this.gameOverTitle.textContent = title;
@@ -997,6 +1059,282 @@ class BaateinGame {
         this.resignBtn.disabled = true;
         this.resignBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resigning...';
         this.showNotification('You have resigned', 'warning');
+    }
+    
+    // Draw winning line through winning cells
+    drawWinningLine(winningLine) {
+        console.log('🎯 drawWinningLine called with:', winningLine);
+        
+        if (!this.gameBoard) {
+            console.error('❌ No game board element found');
+            return;
+        }
+        
+        if (!winningLine || winningLine.length !== 3) {
+            console.error('❌ Invalid winning line:', winningLine);
+            return;
+        }
+        
+        const cells = this.gameBoard.querySelectorAll('.cell');
+        if (cells.length !== 9) {
+            console.error('❌ Invalid cell count:', cells.length);
+            return;
+        }
+        
+        console.log('🎯 Cells found:', cells.length);
+        
+        // Mark winning cells
+        winningLine.forEach(index => {
+            const cell = cells[index];
+            if (cell) {
+                cell.classList.add('winning');
+                console.log('🎯 Marked cell', index, 'as winning');
+            } else {
+                console.error('❌ Cell not found at index:', index);
+            }
+        });
+        
+        // Determine line type
+        const [a, b, c] = winningLine;
+        let lineType = '';
+        
+        // Check if row (0,1,2), (3,4,5), or (6,7,8)
+        if ((a === 0 && b === 1 && c === 2) || 
+            (a === 3 && b === 4 && c === 5) || 
+            (a === 6 && b === 7 && c === 8)) {
+            lineType = 'horizontal';
+        }
+        // Check if column (0,3,6), (1,4,7), or (2,5,8)
+        else if ((a === 0 && b === 3 && c === 6) || 
+                 (a === 1 && b === 4 && c === 7) || 
+                 (a === 2 && b === 5 && c === 8)) {
+            lineType = 'vertical';
+        }
+        // Check if diagonal
+        else if (a === 0 && b === 4 && c === 8) {
+            lineType = 'diagonal-tl-br'; // Top-left to bottom-right
+        }
+        else if (a === 2 && b === 4 && c === 6) {
+            lineType = 'diagonal-tr-bl'; // Top-right to bottom-left
+        }
+        
+        // Remove any existing winning line
+        const existingLine = this.gameBoard.querySelector('.winning-line');
+        if (existingLine) {
+            existingLine.remove();
+        }
+        
+        // Create line element
+        const line = document.createElement('div');
+        line.className = `winning-line ${lineType}`;
+        
+        // Ensure board has relative positioning
+        if (this.gameBoard) {
+            this.gameBoard.style.position = 'relative';
+            this.gameBoard.style.overflow = 'visible';
+        }
+        
+        console.log('🎯 Creating line with type:', lineType);
+        
+        // Position the line based on winning cells
+        if (lineType === 'horizontal') {
+            // For horizontal lines, find which row (0, 1, or 2)
+            const row = Math.floor(a / 3);
+            const cellSize = this.gameBoard.clientWidth / 3; // Each cell is 1/3 of board width
+            const gap = 10; // Gap between cells
+            
+            // Calculate exact position - middle of the row
+            const topPosition = (row * cellSize) + (cellSize / 2) + (row * gap) - 4; // -4 to center 8px line
+            
+            line.style.position = 'absolute';
+            line.style.top = `${topPosition}px`;
+            line.style.left = '0';
+            line.style.width = '100%';
+            line.style.height = '8px';
+            
+            console.log('🎯 Horizontal line positioned at:', topPosition);
+            this.gameBoard.appendChild(line);
+        }
+        else if (lineType === 'vertical') {
+            // For vertical lines, find which column (0, 1, or 2)
+            const col = a % 3;
+            const cellSize = this.gameBoard.clientWidth / 3;
+            const gap = 10;
+            
+            // Calculate exact position - middle of the column
+            const leftPosition = (col * cellSize) + (cellSize / 2) + (col * gap) - 4; // -4 to center 8px line
+            
+            line.style.position = 'absolute';
+            line.style.left = `${leftPosition}px`;
+            line.style.top = '0';
+            line.style.width = '8px';
+            line.style.height = '100%';
+            
+            console.log('🎯 Vertical line positioned at:', leftPosition);
+            this.gameBoard.appendChild(line);
+        }
+        else if (lineType.includes('diagonal')) {
+            // For diagonal, center it on the board
+            line.style.position = 'absolute';
+            line.style.top = '50%';
+            line.style.left = '50%';
+            line.style.width = '141.42%'; // sqrt(2) * 100% for diagonal
+            line.style.height = '8px';
+            line.style.setProperty('--rotation', lineType === 'diagonal-tl-br' ? '45deg' : '-45deg');
+            
+            console.log('🎯 Diagonal line created');
+            this.gameBoard.appendChild(line);
+        }
+        
+        // Remove line after animation completes
+        setTimeout(() => {
+            if (line && line.parentNode) {
+                // Keep the line but ensure it stays visible
+            }
+        }, 100);
+    }
+    
+    // Create fireworks effect
+    createFireworks() {
+        console.log('🎆 Creating fireworks');
+        
+        // Remove existing fireworks container
+        const existing = document.querySelector('.fireworks-container');
+        if (existing) {
+            existing.remove();
+        }
+        
+        const container = document.createElement('div');
+        container.className = 'fireworks-container';
+        document.body.appendChild(container);
+        
+        console.log('🎆 Fireworks container created');
+        
+        // Get board center for fireworks origin
+        const boardRect = this.gameBoard ? this.gameBoard.getBoundingClientRect() : null;
+        const centerX = boardRect ? boardRect.left + boardRect.width / 2 : window.innerWidth / 2;
+        const centerY = boardRect ? boardRect.top + boardRect.height / 2 : window.innerHeight / 2;
+        
+        const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffa500'];
+        const particleCount = 100;
+        
+        // Create multiple firework bursts
+        for (let burst = 0; burst < 5; burst++) {
+            setTimeout(() => {
+                for (let i = 0; i < particleCount; i++) {
+                    const particle = document.createElement('div');
+                    particle.className = 'firework';
+                    
+                    const angle = (Math.PI * 2 * i) / particleCount;
+                    const velocity = 200 + Math.random() * 300;
+                    const x = Math.cos(angle) * velocity;
+                    const y = Math.sin(angle) * velocity;
+                    
+                    particle.style.left = `${centerX}px`;
+                    particle.style.top = `${centerY}px`;
+                    particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    particle.style.setProperty('--x-end', `${x}px`);
+                    particle.style.setProperty('--y-end', `${y}px`);
+                    particle.style.animationDelay = `${burst * 0.3}s`;
+                    
+                    container.appendChild(particle);
+                    
+                    // Remove particle after animation
+                    setTimeout(() => {
+                        if (particle.parentNode) {
+                            particle.remove();
+                        }
+                    }, 2000);
+                }
+            }, burst * 300);
+        }
+        
+        // Create confetti falling from top
+        for (let i = 0; i < 50; i++) {
+            setTimeout(() => {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = `${Math.random() * 100}%`;
+                confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.animationDelay = `${Math.random() * 0.5}s`;
+                container.appendChild(confetti);
+                
+                setTimeout(() => {
+                    if (confetti.parentNode) {
+                        confetti.remove();
+                    }
+                }, 3500);
+            }, i * 50);
+        }
+        
+        // Remove container after all animations
+        setTimeout(() => {
+            if (container.parentNode) {
+                container.remove();
+            }
+        }, 5000);
+    }
+    
+    // Add crying face animation for loss
+    addCryingFace() {
+        console.log('😢 Adding crying face');
+        
+        if (!this.gameOverContent) {
+            console.error('❌ No gameOverContent element found');
+            return;
+        }
+        
+        // Remove existing crying face
+        const existing = this.gameOverContent.querySelector('.crying-face-container');
+        if (existing) {
+            existing.remove();
+        }
+        
+        const container = document.createElement('div');
+        container.className = 'crying-face-container';
+        container.style.position = 'relative';
+        container.style.display = 'inline-block';
+        
+        const face = document.createElement('span');
+        face.className = 'crying-face';
+        face.textContent = '😢';
+        container.appendChild(face);
+        
+        // Add tears
+        for (let i = 0; i < 6; i++) {
+            const tear = document.createElement('div');
+            tear.className = 'tear';
+            tear.style.left = `${20 + i * 15}%`;
+            tear.style.top = '70%';
+            tear.style.animationDelay = `${i * 0.2}s`;
+            container.appendChild(tear);
+        }
+        
+        // Insert before title
+        if (this.gameOverTitle && this.gameOverTitle.parentNode) {
+            this.gameOverTitle.parentNode.insertBefore(container, this.gameOverTitle);
+        }
+        
+        // Keep tears falling
+        const tearInterval = setInterval(() => {
+            // Add new tear periodically
+            const newTear = document.createElement('div');
+            newTear.className = 'tear';
+            newTear.style.left = `${30 + Math.random() * 40}%`;
+            newTear.style.top = '70%';
+            container.appendChild(newTear);
+            
+            setTimeout(() => {
+                if (newTear.parentNode) {
+                    newTear.remove();
+                }
+            }, 1500);
+        }, 500);
+        
+        // Stop tears when screen changes
+        setTimeout(() => {
+            clearInterval(tearInterval);
+        }, 5000);
     }
 }
 

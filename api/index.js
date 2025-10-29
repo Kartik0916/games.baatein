@@ -11,9 +11,7 @@ const server = http.createServer(app);
 // CORS Configuration for Render deployment
 const allowedOrigins = [
   "http://localhost:3000",
-  "http://localhost:5000",
-  "http://localhost:8080", // For local development with Python/http-server
-  "http://127.0.0.1:8080", // Alternative localhost
+  "http://localhost:5000", 
   "https://gamesbaatein-frontend.vercel.app",
   "https://gamesbaatein-frontend.vercel.app/",
   // Add your Vercel frontend URL here

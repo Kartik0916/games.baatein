@@ -400,6 +400,8 @@ body {
     max-width: 400px;
     margin: 0 auto 2rem;
     aspect-ratio: 1;
+    position: relative;
+    overflow: visible;
 }
 
 .cell {
@@ -465,62 +467,85 @@ body {
                 0 0 40px rgba(255, 215, 0, 0.6),
                 0 0 60px rgba(255, 215, 0, 0.4);
     z-index: 100;
-    animation: drawLine 1s ease-out;
+    pointer-events: none;
 }
 
 .winning-line.horizontal {
-    height: 6px;
+    height: 8px;
     width: 100%;
-    top: 50%;
     left: 0;
-    transform: translateY(-50%) scaleX(0);
     transform-origin: left center;
-    animation: drawLineHorizontal 1s ease-out forwards;
+    animation: drawLineHorizontal 1.2s ease-out forwards;
 }
 
 .winning-line.vertical {
-    width: 6px;
+    width: 8px;
     height: 100%;
-    left: 50%;
     top: 0;
-    transform: translateX(-50%) scaleY(0);
     transform-origin: center top;
-    animation: drawLineVertical 1s ease-out forwards;
+    animation: drawLineVertical 1.2s ease-out forwards;
 }
 
 .winning-line.diagonal-tl-br {
-    width: 140%;
-    height: 6px;
+    width: 141.42%;
+    height: 8px;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%) rotate(45deg) scaleX(0);
+    transform: translate(-50%, -50%) rotate(45deg);
     transform-origin: center center;
-    animation: drawLineDiagonal 1s ease-out forwards;
+    animation: drawLineDiagonal 1.2s ease-out forwards;
 }
 
 .winning-line.diagonal-tr-bl {
-    width: 140%;
-    height: 6px;
+    width: 141.42%;
+    height: 8px;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%) rotate(-45deg) scaleX(0);
+    transform: translate(-50%, -50%) rotate(-45deg);
     transform-origin: center center;
-    animation: drawLineDiagonal 1s ease-out forwards;
+    animation: drawLineDiagonal 1.2s ease-out forwards;
 }
 
 @keyframes drawLineHorizontal {
-    0% { transform: translateY(-50%) scaleX(0); }
-    100% { transform: translateY(-50%) scaleX(1); }
+    0% { 
+        transform: scaleX(0); 
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% { 
+        transform: scaleX(1); 
+        opacity: 1;
+    }
 }
 
 @keyframes drawLineVertical {
-    0% { transform: translateX(-50%) scaleY(0); }
-    100% { transform: translateX(-50%) scaleY(1); }
+    0% { 
+        transform: scaleY(0); 
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% { 
+        transform: scaleY(1); 
+        opacity: 1;
+    }
 }
 
 @keyframes drawLineDiagonal {
-    0% { transform: translate(-50%, -50%) rotate(var(--rotation, 45deg)) scaleX(0); }
-    100% { transform: translate(-50%, -50%) rotate(var(--rotation, 45deg)) scaleX(1); }
+    0% { 
+        transform: translate(-50%, -50%) rotate(var(--rotation, 45deg)) scaleX(0);
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% { 
+        transform: translate(-50%, -50%) rotate(var(--rotation, 45deg)) scaleX(1);
+        opacity: 1;
+    }
 }
 
 /* Smooth Move Animation */
