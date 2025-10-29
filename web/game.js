@@ -35,6 +35,8 @@ class BaateinGame {
         this.gameBoard = document.getElementById('gameBoard');
         this.currentPlayerText = document.getElementById('currentPlayerText');
         this.gameStatus = document.getElementById('gameStatus');
+        this.offerDrawBtn = document.getElementById('offerDrawBtn');
+        this.resignBtn = document.getElementById('resignBtn');
         this.gameOver = document.getElementById('gameOver');
         this.gameOverTitle = document.getElementById('gameOverTitle');
         this.gameOverMessage = document.getElementById('gameOverMessage');
@@ -58,6 +60,8 @@ class BaateinGame {
         this.readyBtn.addEventListener('click', () => this.markReady());
         this.playAgainBtn.addEventListener('click', () => this.playAgain());
         this.leaveRoomBtn.addEventListener('click', () => this.leaveRoom());
+        this.offerDrawBtn.addEventListener('click', () => this.offerDraw());
+        this.resignBtn.addEventListener('click', () => this.resign());
         this.sendMessageBtn.addEventListener('click', () => this.sendMessage());
         this.chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.sendMessage();
@@ -255,6 +259,102 @@ class BaateinGame {
             this.showGameOver(data);
         });
         
+        // Draw offer events
+        this.socket.on('drawOffered', (data) => {
+            console.log('🔍 Draw offered by:', data.from);
+            
+            // Show custom notification with accept/reject buttons
+            const notification = document.createElement('div');
+            notification.className = 'notification info';
+            notification.style.position = 'fixed';
+            notification.style.top = '50%';
+            notification.style.left = '50%';
+            notification.style.transform = 'translate(-50%, -50%)';
+            notification.style.zIndex = '10000';
+            notification.style.padding = '2rem';
+            notification.style.minWidth = '300px';
+            notification.style.textAlign = 'center';
+            notification.style.boxShadow = '0 10px 40px rgba(0,0,0,0.3)';
+            
+            notification.innerHTML = `
+                <h3 style="margin-bottom: 1rem;">Draw Offer</h3>
+                <p style="margin-bottom: 1.5rem;">${data.from} has offered a draw. Do you accept?</p>
+                <div style="display: flex; gap: 1rem; justify-content: center;">
+                    <button class="btn btn-success" id="acceptDrawBtn" style="padding: 0.75rem 2rem;">
+                        <i class="fas fa-check"></i> Accept
+                    </button>
+                    <button class="btn btn-danger" id="rejectDrawBtn" style="padding: 0.75rem 2rem;">
+                        <i class="fas fa-times"></i> Decline
+                    </button>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Add event listeners
+            document.getElementById('acceptDrawBtn').addEventListener('click', () => {
+                this.socket.emit('acceptDraw', { roomId: this.currentRoom.roomId });
+                notification.remove();
+            });
+            
+            document.getElementById('rejectDrawBtn').addEventListener('click', () => {
+                this.socket.emit('rejectDraw', { roomId: this.currentRoom.roomId });
+                notification.remove();
+                this.showNotification('Draw offer declined', 'info');
+            });
+        });
+        
+        this.socket.on('drawAccepted', (data) => {
+            console.log('🔍 Draw accepted');
+            this.showNotification('Draw accepted by opponent', 'success');
+        });
+        
+        this.socket.on('drawRejected', (data) => {
+            console.log('🔍 Draw rejected');
+            this.showNotification('Draw offer was declined', 'info');
+            // Re-enable draw button when offer is rejected
+            if (this.offerDrawBtn) {
+                this.offerDrawBtn.disabled = false;
+                this.offerDrawBtn.innerHTML = '<i class="fas fa-handshake"></i> Offer Draw';
+            }
+        });
+        
+        this.socket.on('drawOfferSent', (data) => {
+            console.log('🔍 Draw offer sent:', data);
+            // Button is already disabled, just confirm the message
+        });
+        
+        // Resign event
+        this.socket.on('playerResigned', (data) => {
+            console.log('🔍 Player resigned:', data);
+            
+            // Determine winner
+            let winner;
+            if (data.resignedPlayerId === this.user.userId) {
+                // I resigned, opponent wins
+                winner = data.winner;
+            } else {
+                // Opponent resigned, I win
+                winner = this.user.userId;
+            }
+            
+            // Show game over with appropriate message
+            this.showGameOver({
+                winner: winner,
+                reason: 'resignation'
+            });
+        });
+        
+        // Draw accepted - show game over as draw
+        this.socket.on('drawAccepted', (data) => {
+            console.log('🔍 Draw accepted:', data);
+            // Trigger game over with draw result
+            this.showGameOver({
+                winner: 'draw',
+                reason: 'draw_accepted'
+            });
+        });
+        
         this.socket.on('chatMessage', (data) => {
             if (data && data.username && data.message) {
                 this.addChatMessage(data);
@@ -398,6 +498,14 @@ class BaateinGame {
             this.gameBoard.innerHTML = '';
         }
         
+        // Disable draw and resign buttons when in waiting room
+        if (this.offerDrawBtn) {
+            this.offerDrawBtn.disabled = true;
+        }
+        if (this.resignBtn) {
+            this.resignBtn.disabled = true;
+        }
+        
         // Reset game state to empty if needed (should already be done but ensure it)
         if (this.gameState && this.gameState.board) {
             // Verify it's actually empty
@@ -507,6 +615,15 @@ class BaateinGame {
         this.waitingRoom.style.display = 'none';
         this.gameBoardContainer.style.display = 'block';
         this.gameOver.style.display = 'none';
+        
+        // Enable draw and resign buttons when game is active
+        if (this.offerDrawBtn) {
+            this.offerDrawBtn.disabled = false;
+        }
+        if (this.resignBtn) {
+            this.resignBtn.disabled = false;
+        }
+        
         this.createGameBoard();
         this.updateGameStatus();
     }
@@ -651,17 +768,40 @@ class BaateinGame {
         this.gameBoardContainer.style.display = 'none';
         this.gameOver.style.display = 'block';
         
-        let title, message;
+        // Disable draw and resign buttons when game is over
+        if (this.offerDrawBtn) {
+            this.offerDrawBtn.disabled = true;
+        }
+        if (this.resignBtn) {
+            this.resignBtn.disabled = true;
+        }
+        
+        let title, message, score;
         
         if (data.winner === 'draw') {
             title = 'Game Draw!';
-            message = 'The game ended in a draw.';
+            if (data.reason === 'draw_accepted') {
+                message = 'The game ended in a draw by mutual agreement.';
+            } else {
+                message = 'The game ended in a draw.';
+            }
+            score = 'draw';
         } else if (data.winner === this.user.userId) {
             title = 'You Won!';
-            message = 'Congratulations! You won the game.';
+            if (data.reason === 'resignation') {
+                message = 'Congratulations! Your opponent resigned. You win!';
+            } else {
+                message = 'Congratulations! You won the game.';
+            }
+            score = 'win';
         } else {
             title = 'You Lost!';
-            message = 'Better luck next time!';
+            if (data.reason === 'resignation') {
+                message = 'You resigned. Your opponent wins.';
+            } else {
+                message = 'Better luck next time!';
+            }
+            score = 'loss';
         }
         
         this.gameOverTitle.textContent = title;
@@ -672,6 +812,9 @@ class BaateinGame {
             this.playAgainBtn.disabled = false;
             this.playAgainBtn.innerHTML = '<i class="fas fa-redo"></i> Play Again';
         }
+        
+        // Send game over message to Flutter if available
+        sendGameOverToFlutter(score);
     }
 
     playAgain() {
@@ -798,6 +941,62 @@ class BaateinGame {
             clearInterval(this.pingInterval);
             this.pingInterval = null;
         }
+    }
+    
+    offerDraw() {
+        if (!this.socket || !this.currentRoom || !this.currentRoom.roomId) {
+            this.showNotification('Not connected or invalid room', 'error');
+            return;
+        }
+        
+        if (this.currentRoom.status !== 'active') {
+            this.showNotification('Game is not active', 'warning');
+            return;
+        }
+        
+        // Send draw offer to server
+        this.socket.emit('offerDraw', {
+            roomId: this.currentRoom.roomId
+        });
+        
+        this.showNotification('Draw offer sent to opponent', 'info');
+        this.offerDrawBtn.disabled = true;
+        this.offerDrawBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Offering...';
+        
+        // Re-enable after a timeout
+        setTimeout(() => {
+            if (this.offerDrawBtn) {
+                this.offerDrawBtn.disabled = false;
+                this.offerDrawBtn.innerHTML = '<i class="fas fa-handshake"></i> Offer Draw';
+            }
+        }, 5000);
+    }
+    
+    resign() {
+        if (!this.socket || !this.currentRoom || !this.currentRoom.roomId) {
+            this.showNotification('Not connected or invalid room', 'error');
+            return;
+        }
+        
+        if (this.currentRoom.status !== 'active') {
+            this.showNotification('Game is not active', 'warning');
+            return;
+        }
+        
+        // Confirm resignation
+        const confirmResign = confirm('Are you sure you want to resign? Your opponent will win.');
+        if (!confirmResign) {
+            return;
+        }
+        
+        // Send resignation to server
+        this.socket.emit('resign', {
+            roomId: this.currentRoom.roomId
+        });
+        
+        this.resignBtn.disabled = true;
+        this.resignBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resigning...';
+        this.showNotification('You have resigned', 'warning');
     }
 }
 

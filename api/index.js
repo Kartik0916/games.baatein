@@ -11,7 +11,9 @@ const server = http.createServer(app);
 // CORS Configuration for Render deployment
 const allowedOrigins = [
   "http://localhost:3000",
-  "http://localhost:5000", 
+  "http://localhost:5000",
+  "http://localhost:8080", // For local development with Python/http-server
+  "http://127.0.0.1:8080", // Alternative localhost
   "https://gamesbaatein-frontend.vercel.app",
   "https://gamesbaatein-frontend.vercel.app/",
   // Add your Vercel frontend URL here
@@ -324,7 +326,12 @@ io.on('connection', (socket) => {
         });
 
         if (result.gameOver) {
-          endGame(room, result);
+          // Pass winning line information to endGame
+          endGame(room, {
+            winner: result.winner,
+            reason: 'normal',
+            winningLine: result.winningLine
+          });
         }
       } else {
         socket.emit('error', { message: result.message || 'Invalid move' });
@@ -466,6 +473,189 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Offer Draw
+  socket.on('offerDraw', (data) => {
+    try {
+      const { roomId } = data;
+      
+      if (!roomId) {
+        socket.emit('error', { message: 'Room ID is required' });
+        return;
+      }
+      
+      const room = activeRooms.get(roomId);
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' });
+        return;
+      }
+
+      const offeringPlayer = room.players.find(p => p.socketId === socket.id);
+      if (!offeringPlayer) {
+        socket.emit('error', { message: 'Player not found in room' });
+        return;
+      }
+
+      if (room.status !== 'active') {
+        socket.emit('error', { message: 'Game is not active' });
+        return;
+      }
+
+      // Notify the other player about draw offer
+      const otherPlayer = room.players.find(p => p.socketId !== socket.id);
+      if (otherPlayer) {
+        io.to(otherPlayer.socketId).emit('drawOffered', {
+          from: offeringPlayer.username,
+          roomId: roomId
+        });
+        
+        socket.emit('drawOfferSent', {
+          message: 'Draw offer sent to opponent'
+        });
+      }
+    } catch (error) {
+      console.error('❌ Offer draw error:', error);
+      socket.emit('error', { message: 'Failed to offer draw' });
+    }
+  });
+
+  // Accept Draw
+  socket.on('acceptDraw', (data) => {
+    try {
+      const { roomId } = data;
+      
+      if (!roomId) {
+        socket.emit('error', { message: 'Room ID is required' });
+        return;
+      }
+      
+      const room = activeRooms.get(roomId);
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' });
+        return;
+      }
+
+      if (room.status !== 'active') {
+        socket.emit('error', { message: 'Game is not active' });
+        return;
+      }
+
+      // End game as draw
+      const acceptingPlayer = room.players.find(p => p.socketId === socket.id);
+      const offeringPlayer = room.players.find(p => p.socketId !== socket.id);
+      
+      endGame(room, {
+        gameOver: true,
+        winner: 'draw',
+        reason: 'draw_accepted'
+      });
+
+      // Notify both players
+      io.to(room.roomId).emit('drawAccepted', {
+        message: `${acceptingPlayer.username} accepted the draw offer`,
+        reason: 'draw_accepted'
+      });
+      
+      console.log(`🤝 Draw accepted in room ${roomId}`);
+    } catch (error) {
+      console.error('❌ Accept draw error:', error);
+      socket.emit('error', { message: 'Failed to accept draw' });
+    }
+  });
+
+  // Reject Draw
+  socket.on('rejectDraw', (data) => {
+    try {
+      const { roomId } = data;
+      
+      if (!roomId) {
+        socket.emit('error', { message: 'Room ID is required' });
+        return;
+      }
+      
+      const room = activeRooms.get(roomId);
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' });
+        return;
+      }
+
+      const rejectingPlayer = room.players.find(p => p.socketId === socket.id);
+      const offeringPlayer = room.players.find(p => p.socketId !== socket.id);
+      
+      // Notify the offering player
+      if (offeringPlayer) {
+        io.to(offeringPlayer.socketId).emit('drawRejected', {
+          message: `${rejectingPlayer.username} declined the draw offer`
+        });
+      }
+      
+      socket.emit('drawRejected', {
+        message: 'Draw offer declined'
+      });
+      
+      console.log(`❌ Draw rejected in room ${roomId}`);
+    } catch (error) {
+      console.error('❌ Reject draw error:', error);
+      socket.emit('error', { message: 'Failed to reject draw' });
+    }
+  });
+
+  // Resign
+  socket.on('resign', (data) => {
+    try {
+      const { roomId } = data;
+      
+      if (!roomId) {
+        socket.emit('error', { message: 'Room ID is required' });
+        return;
+      }
+      
+      const room = activeRooms.get(roomId);
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' });
+        return;
+      }
+
+      const resigningPlayer = room.players.find(p => p.socketId === socket.id);
+      if (!resigningPlayer) {
+        socket.emit('error', { message: 'Player not found in room' });
+        return;
+      }
+
+      if (room.status !== 'active') {
+        socket.emit('error', { message: 'Game is not active' });
+        return;
+      }
+
+      // Find opponent as winner
+      const opponent = room.players.find(p => p.socketId !== socket.id);
+      if (!opponent) {
+        socket.emit('error', { message: 'Opponent not found' });
+        return;
+      }
+
+      // End game with opponent as winner
+      endGame(room, {
+        gameOver: true,
+        winner: opponent.userId,
+        reason: 'resignation'
+      });
+
+      // Notify both players
+      io.to(room.roomId).emit('playerResigned', {
+        resignedPlayerId: resigningPlayer.userId,
+        resignedPlayer: resigningPlayer.username,
+        winner: opponent.userId,
+        winnerName: opponent.username,
+        reason: 'resignation'
+      });
+      
+      console.log(`🏳️ Player ${resigningPlayer.username} resigned in room ${roomId}`);
+    } catch (error) {
+      console.error('❌ Resign error:', error);
+      socket.emit('error', { message: 'Failed to resign' });
+    }
+  });
+
   // Leave Room
   socket.on('leaveRoom', () => {
     handlePlayerLeave(socket);
@@ -504,13 +694,16 @@ function processMove(room, move, player) {
   
   const newMoves = [...state.moves, { position, player: player.userId, symbol: player.symbol }];
   
-  const winnerSymbol = checkWinner(newBoard);
+  const winnerResult = checkWinner(newBoard);
+  const winnerSymbol = winnerResult ? winnerResult.symbol : null;
   const isDraw = !winnerSymbol && newBoard.every(cell => cell !== null);
   
   let winnerUserId = null;
+  let winningLine = null;
   if (winnerSymbol) {
     const winningPlayer = room.players.find(p => p.symbol === winnerSymbol);
     winnerUserId = winningPlayer ? winningPlayer.userId : null;
+    winningLine = winnerResult.line; // Get winning line indices
   }
   
   const newState = {
@@ -518,14 +711,16 @@ function processMove(room, move, player) {
     moves: newMoves,
     winner: winnerSymbol,
     isDraw: isDraw,
-    gameOver: winnerSymbol !== null || isDraw
+    gameOver: winnerSymbol !== null || isDraw,
+    winningLine: winningLine // Include winning line in state
   };
   
   return {
     valid: true,
     newState: newState,
     gameOver: newState.gameOver,
-    winner: winnerUserId || (isDraw ? 'draw' : null)
+    winner: winnerUserId || (isDraw ? 'draw' : null),
+    winningLine: winningLine // Return winning line for animation
   };
 }
 
@@ -539,10 +734,36 @@ function checkWinner(board) {
   for (let line of lines) {
     const [a, b, c] = line;
     if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return board[a];
+      return {
+        symbol: board[a],
+        line: line, // Return the winning line indices
+        type: getLineType(line) // Return line type (row, column, diagonal)
+      };
     }
   }
   return null;
+}
+
+function getLineType(line) {
+  // Determine line type for animation
+  const [a, b, c] = line;
+  
+  // Rows (horizontal)
+  if ((a === 0 && b === 1 && c === 2) || 
+      (a === 3 && b === 4 && c === 5) || 
+      (a === 6 && b === 7 && c === 8)) {
+    return 'row';
+  }
+  
+  // Columns (vertical)
+  if ((a === 0 && b === 3 && c === 6) || 
+      (a === 1 && b === 4 && c === 7) || 
+      (a === 2 && b === 5 && c === 8)) {
+    return 'column';
+  }
+  
+  // Diagonals
+  return 'diagonal';
 }
 
 function sanitizeRoom(room) {
@@ -670,6 +891,7 @@ function endGame(room, result) {
     winner: result.winner,
     reason: result.reason || 'normal',
     gameState: room.gameState,
+    winningLine: result.winningLine || room.gameState.winningLine || null, // Include winning line
     duration: room.startTime ? Math.floor((room.endTime - room.startTime) / 1000) : 0
   });
 
