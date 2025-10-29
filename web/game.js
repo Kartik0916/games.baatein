@@ -180,11 +180,38 @@ class BaateinGame {
         
         this.socket.on('gameStarted', (data) => {
             if (data.gameState && data.gameState.board) {
-                this.gameState = data.gameState;
+                // Create a completely fresh game state - ensure board is empty array
+                const boardArray = Array.isArray(data.gameState.board) 
+                    ? data.gameState.board 
+                    : Array(9).fill(null);
+                
+                // Verify board is actually empty (should be for new game)
+                const isEmpty = boardArray.every(cell => cell === null);
+                
+                this.gameState = {
+                    board: isEmpty ? Array(9).fill(null) : [...boardArray],
+                    moves: data.gameState.moves ? [...data.gameState.moves] : [],
+                    winner: null,
+                    isDraw: false,
+                    gameOver: false
+                };
+                
                 if (this.currentRoom) {
                     this.currentRoom.status = 'active';
                     this.currentRoom.currentTurn = data.currentTurn;
                 }
+                
+                // Force clear any existing board HTML and cells
+                if (this.gameBoard) {
+                    this.gameBoard.innerHTML = '';
+                }
+                
+                // Also clear from container if exists
+                if (this.gameBoardContainer) {
+                    const existingCells = this.gameBoardContainer.querySelectorAll('.cell');
+                    existingCells.forEach(cell => cell.remove());
+                }
+                
                 this.showGameBoard();
                 this.updateGameStatus();
                 this.showNotification('Game started!', 'success');
@@ -192,9 +219,20 @@ class BaateinGame {
         });
         
         this.socket.on('moveMade', (data) => {
-            if (data.gameState) {
-                this.gameState = data.gameState;
-                this.currentRoom.currentTurn = data.currentTurn;
+            if (data.gameState && data.gameState.board) {
+                // Create fresh copy of game state
+                this.gameState = {
+                    board: [...data.gameState.board],
+                    moves: data.gameState.moves ? [...data.gameState.moves] : [],
+                    winner: data.gameState.winner || null,
+                    isDraw: data.gameState.isDraw || false,
+                    gameOver: data.gameState.gameOver || false
+                };
+                
+                if (this.currentRoom) {
+                    this.currentRoom.currentTurn = data.currentTurn;
+                }
+                
                 this.updateGameBoard();
                 this.updateGameStatus();
             }
@@ -232,13 +270,30 @@ class BaateinGame {
         this.socket.on('gameReset', (data) => {
             console.log('🔍 Game reset:', data);
             if (data.room) {
-                // Update room and game state
-                this.currentRoom = data.room;
-                this.gameState = data.room.gameState;
+                // Update room and game state with fresh copy
+                this.currentRoom = {
+                    ...data.room,
+                    players: data.room.players ? [...data.room.players] : []
+                };
+                
+                // ALWAYS create completely fresh empty game state on reset
+                this.gameState = {
+                    board: Array(9).fill(null), // Always empty board
+                    moves: [],
+                    winner: null,
+                    isDraw: false,
+                    gameOver: false
+                };
                 
                 // Force clear the game board HTML
                 if (this.gameBoard) {
                     this.gameBoard.innerHTML = '';
+                }
+                
+                // Clear all cells if board container exists
+                if (this.gameBoardContainer) {
+                    const cells = this.gameBoardContainer.querySelectorAll('.cell');
+                    cells.forEach(cell => cell.remove());
                 }
                 
                 // Explicitly hide all game-related screens
@@ -257,6 +312,11 @@ class BaateinGame {
                 // Clear any turn indicators
                 if (this.currentPlayerText) {
                     this.currentPlayerText.textContent = '';
+                }
+                
+                // Clear game status
+                if (this.gameStatus) {
+                    this.gameStatus.textContent = '';
                 }
                 
                 this.showNotification(data.message || 'Game reset! Both players need to mark ready.', 'success');
@@ -312,7 +372,28 @@ class BaateinGame {
     showWaitingRoom() {
         // Force hide game screens first
         this.gameOver.style.display = 'none';
-        this.gameBoardContainer.style.display = 'none';
+        if (this.gameBoardContainer) {
+            this.gameBoardContainer.style.display = 'none';
+            
+            // Aggressively remove all cells
+            const allCells = this.gameBoardContainer.querySelectorAll('.cell');
+            allCells.forEach(cell => cell.remove());
+        }
+        
+        // Clear game board HTML completely
+        if (this.gameBoard) {
+            this.gameBoard.innerHTML = '';
+        }
+        
+        // Reset game state to empty if needed (should already be done but ensure it)
+        if (this.gameState && this.gameState.board) {
+            // Verify it's actually empty
+            const hasMoves = this.gameState.board.some(cell => cell !== null);
+            if (hasMoves && this.currentRoom && this.currentRoom.status === 'waiting') {
+                // Force empty if game was reset
+                this.gameState.board = Array(9).fill(null);
+            }
+        }
         
         // Show waiting room
         this.waitingRoom.style.display = 'block';
@@ -323,14 +404,14 @@ class BaateinGame {
             this.roomCode.textContent = this.currentRoom.roomId;
         }
         
-        // Clear game board HTML
-        if (this.gameBoard) {
-            this.gameBoard.innerHTML = '';
-        }
-        
         // Reset turn indicator
         if (this.currentPlayerText) {
             this.currentPlayerText.textContent = '';
+        }
+        
+        // Clear game status
+        if (this.gameStatus) {
+            this.gameStatus.textContent = '';
         }
         
         // Update players list
@@ -431,12 +512,27 @@ class BaateinGame {
     }
 
     updateGameBoard() {
+        if (!this.gameBoard || !this.gameState || !this.gameState.board) {
+            return;
+        }
+        
         const cells = this.gameBoard.querySelectorAll('.cell');
+        
+        // Ensure we have the right number of cells
+        if (cells.length !== 9) {
+            // Recreate board if cells don't match
+            this.createGameBoard();
+            return;
+        }
+        
+        // Update each cell based on current game state
         cells.forEach((cell, index) => {
             const value = this.gameState.board[index];
             if (value) {
                 cell.textContent = value;
                 cell.classList.add('occupied', value.toLowerCase());
+                cell.classList.remove('x', 'o');
+                cell.classList.add(value.toLowerCase());
             } else {
                 cell.textContent = '';
                 cell.classList.remove('occupied', 'x', 'o');
