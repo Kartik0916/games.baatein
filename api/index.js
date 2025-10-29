@@ -12,10 +12,10 @@ const server = http.createServer(app);
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5000", 
-  "https://games-baatein-frontend.vercel.app",
-  "https://games-baatein-frontend.vercel.app/",
+  "https://gamesbaatein-frontend.vercel.app",
+  "https://gamesbaatein-frontend.vercel.app/",
   // Add your Vercel frontend URL here
-  process.env.FRONTEND_URL || "https://games-baatein-frontend.vercel.app"
+  process.env.FRONTEND_URL || "https://gamesbaatein-frontend.vercel.app"
 ];
 
 const io = socketIo(server, {
@@ -72,6 +72,18 @@ app.get('/', (req, res) => {
     status: 'online',
     message: 'Baatein Tic Tac Toe Server',
     game: 'tic-tac-toe',
+    timestamp: new Date().toISOString(),
+    activeRooms: activeRooms.size,
+    connectedUsers: userSockets.size
+  });
+});
+
+// Additional health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
     timestamp: new Date().toISOString()
   });
 });
@@ -94,6 +106,9 @@ function initializeGame() {
 // Socket.IO Events
 io.on('connection', (socket) => {
   console.log('🔌 Client connected:', socket.id);
+  
+  // Set connection timeout
+  socket.setTimeout(30000); // 30 seconds timeout
 
   // Authentication
   socket.on('authenticate', (data) => {
@@ -331,6 +346,11 @@ io.on('connection', (socket) => {
   // Leave Room
   socket.on('leaveRoom', () => {
     handlePlayerLeave(socket);
+  });
+
+  // Ping/Pong for connection health
+  socket.on('ping', () => {
+    socket.emit('pong');
   });
 
   // Disconnect

@@ -6,6 +6,7 @@ class BaateinGame {
         this.currentRoom = null;
         this.gameState = null;
         this.isMyTurn = false;
+        this.pingInterval = null;
         
         this.initializeElements();
         this.setupEventListeners();
@@ -143,7 +144,7 @@ class BaateinGame {
     connectToServer() {
         return new Promise((resolve, reject) => {
             // Get WebSocket URL from environment or use default
-            const wsUrl = window.WEBSOCKET_URL || 'https://games-baatein.vercel.app';
+            const wsUrl = window.WEBSOCKET_URL || 'https://games-baatein-backend.onrender.com';
             console.log('🔌 Connecting to WebSocket:', wsUrl);
             
             this.socket = io(wsUrl, {
@@ -156,6 +157,10 @@ class BaateinGame {
                 this.socket.emit('authenticate', this.user);
                 
                 this.setupSocketListeners();
+                
+                // Start ping interval to keep connection alive
+                this.startPingInterval();
+                
                 resolve();
             });
             
@@ -167,6 +172,11 @@ class BaateinGame {
             this.socket.on('disconnect', () => {
                 console.log('Disconnected from server');
                 this.showNotification('Disconnected from server', 'warning');
+            });
+            
+            // Ping/pong for connection health
+            this.socket.on('pong', () => {
+                console.log('🔍 Server pong received');
             });
         });
     }
@@ -560,6 +570,9 @@ class BaateinGame {
             this.socket.disconnect();
         }
         
+        // Stop ping interval
+        this.stopPingInterval();
+        
         this.user = null;
         this.currentRoom = null;
         this.gameState = null;
@@ -588,6 +601,28 @@ class BaateinGame {
 
     hideLoading() {
         this.loadingOverlay.style.display = 'none';
+    }
+    
+    startPingInterval() {
+        // Clear existing interval
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+        }
+        
+        // Ping every 30 seconds to keep connection alive
+        this.pingInterval = setInterval(() => {
+            if (this.socket && this.socket.connected) {
+                this.socket.emit('ping');
+                console.log('🔍 Sent ping to server');
+            }
+        }, 30000);
+    }
+    
+    stopPingInterval() {
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
     }
 }
 

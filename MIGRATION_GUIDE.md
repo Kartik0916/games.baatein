@@ -46,7 +46,7 @@ This guide will help you migrate your backend from Vercel to Render to enable pe
    ```
    NODE_ENV=production
    MONGODB_URI=your_mongodb_connection_string
-   FRONTEND_URL=https://games-baatein-frontend.vercel.app
+   FRONTEND_URL=https://gamesbaatein-frontend.vercel.app
    ```
 
 5. **Deploy**: Click "Create Web Service" and wait for deployment
@@ -57,23 +57,23 @@ This guide will help you migrate your backend from Vercel to Render to enable pe
 
 1. **Update Flutter Build**:
    ```bash
-   flutter build web --dart-define=WEBSOCKET_URL=https://your-backend-url.onrender.com
+   flutter build web --dart-define=WEBSOCKET_URL=https://games-baatein-backend.onrender.com
    ```
 
 2. **For Development**:
    ```bash
-   flutter run -d chrome --dart-define=WEBSOCKET_URL=https://your-backend-url.onrender.com
+   flutter run -d chrome --dart-define=WEBSOCKET_URL=https://games-baatein-backend.onrender.com
    ```
 
 3. **Update Vercel Deployment** (if using Vercel for Flutter web):
    - In Vercel dashboard, add environment variable:
    ```
-   WEBSOCKET_URL=https://your-backend-url.onrender.com
+   WEBSOCKET_URL=https://games-baatein-backend.onrender.com
    ```
 
 ### Step 3: Test the Migration
 
-1. **Test Backend Health**: Visit `https://your-backend-url.onrender.com` - should return JSON status
+1. **Test Backend Health**: Visit `https://games-baatein-backend.onrender.com` - should return JSON status
 2. **Test WebSocket Connection**: Open browser dev tools and check for successful WebSocket connection
 3. **Test Game Functionality**: Create rooms, join games, and verify real-time features work
 
@@ -83,12 +83,12 @@ This guide will help you migrate your backend from Vercel to Render to enable pe
 ```
 NODE_ENV=production
 MONGODB_URI=mongodb://localhost:27017/baatein-games  # or your MongoDB Atlas URL
-FRONTEND_URL=https://games-baatein-frontend.vercel.app
+FRONTEND_URL=https://gamesbaatein-frontend.vercel.app
 ```
 
 ### Frontend (Flutter/Vercel)
 ```
-WEBSOCKET_URL=https://your-backend-url.onrender.com
+WEBSOCKET_URL=https://games-baatein-backend.onrender.com
 ```
 
 ## Troubleshooting
@@ -140,7 +140,7 @@ if (require.main === module) {
 ### Frontend (`assets/game/game.js`)
 ```javascript
 // Configurable WebSocket URL
-const wsUrl = window.WEBSOCKET_URL || 'https://games-baatein.vercel.app';
+const wsUrl = window.WEBSOCKET_URL || 'https://games-baatein-backend.onrender.com';
 this.socket = io(wsUrl, {
   transports: ['websocket', 'polling']
 });
@@ -151,7 +151,7 @@ this.socket = io(wsUrl, {
 // Inject WebSocket URL from environment
 final String wsUrl = const String.fromEnvironment(
   'WEBSOCKET_URL',
-  defaultValue: 'https://games-baatein.vercel.app',
+  defaultValue: 'https://games-baatein-backend.onrender.com',
 );
 
 // Inject into HTML

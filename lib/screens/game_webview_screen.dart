@@ -61,7 +61,7 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
       // Inject WebSocket URL configuration
       final String wsUrl = const String.fromEnvironment(
         'WEBSOCKET_URL',
-        defaultValue: 'https://games-baatein.vercel.app',
+        defaultValue: 'https://games-baatein-backend.onrender.com',
       );
       
       // Inject the WebSocket URL into the HTML
