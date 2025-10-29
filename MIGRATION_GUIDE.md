@@ -125,8 +125,8 @@ const PORT = process.env.PORT || 4000;
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5000", 
-  "https://games-baatein-frontend.vercel.app",
-  process.env.FRONTEND_URL || "https://games-baatein-frontend.vercel.app"
+  "https://gamesbaatein-frontend.vercel.app",
+  process.env.FRONTEND_URL || "https://gamesbaatein-frontend.vercel.app"
 ];
 
 // Server startup for Render

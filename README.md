@@ -48,7 +48,7 @@ In Vercel Dashboard → Project Settings → Environment Variables:
 
 ### **3. Test URLs**
 - **Backend**: `https://games-baatein.vercel.app/`
-- **Frontend**: `https://games-baatein-frontend.vercel.app/`
+- **Frontend**: `https://gamesbaatein-frontend.vercel.app/`
 
 ## 🎯 **Features**
 
