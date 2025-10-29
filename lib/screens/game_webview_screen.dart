@@ -57,8 +57,28 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
   Future<void> _loadGame() async {
     try {
       final String htmlContent = await rootBundle.loadString('assets/game/index.html');
+      
+      // Inject WebSocket URL configuration
+      final String wsUrl = const String.fromEnvironment(
+        'WEBSOCKET_URL',
+        defaultValue: 'https://games-baatein.vercel.app',
+      );
+      
+      // Inject the WebSocket URL into the HTML
+      final String modifiedHtml = htmlContent.replaceFirst(
+        '<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>',
+        '''
+        <script>
+          // Set WebSocket URL from Flutter environment
+          window.WEBSOCKET_URL = '$wsUrl';
+          console.log('🌐 WebSocket URL set to:', window.WEBSOCKET_URL);
+        </script>
+        <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+        ''',
+      );
+      
       await _controller.loadHtmlString(
-        htmlContent,
+        modifiedHtml,
         baseUrl: 'asset:///assets/game/',
       );
     } catch (e) {

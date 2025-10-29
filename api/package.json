@@ -1,8 +1,12 @@
 {
   "name": "baatein-games-api",
   "version": "1.0.0",
-  "description": "Baatein Games API for Vercel deployment",
+  "description": "Baatein Games API for Render deployment",
   "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
   "dependencies": {
     "express": "^4.18.2",
     "socket.io": "^4.8.1",

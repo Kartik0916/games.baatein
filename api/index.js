@@ -8,16 +8,29 @@ const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 
-// CORS Configuration
+// CORS Configuration for Render deployment
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5000", 
+  "https://games-baatein-frontend.vercel.app",
+  "https://games-baatein-frontend.vercel.app/",
+  // Add your Vercel frontend URL here
+  process.env.FRONTEND_URL || "https://games-baatein-frontend.vercel.app"
+];
+
 const io = socketIo(server, {
   cors: {
-    origin: [
-      "http://localhost:3000",
-      "http://localhost:5000", 
-      "https://games-baatein-frontend.vercel.app",
-      "https://games-baatein-frontend.vercel.app/",
-      "*"
-    ],
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+        callback(null, true);
+      } else {
+        console.log(`🚫 CORS blocked origin: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ["GET", "POST"],
     credentials: true,
     allowedHeaders: ["*"]
@@ -27,7 +40,17 @@ const io = socketIo(server, {
 
 // Middleware
 app.use(cors({
-  origin: "*",
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+      callback(null, true);
+    } else {
+      console.log(`🚫 Express CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
   allowedHeaders: ["*"]
@@ -471,5 +494,15 @@ function handlePlayerLeave(socket) {
   }
 }
 
-// Export for Vercel
+// Start server for Render deployment
+const PORT = process.env.PORT || 4000;
+
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🌐 WebSocket server ready for connections`);
+  });
+}
+
+// Export for Vercel (keep for compatibility)
 module.exports = app;

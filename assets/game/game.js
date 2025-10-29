@@ -142,7 +142,11 @@ class BaateinGame {
 
     connectToServer() {
         return new Promise((resolve, reject) => {
-            this.socket = io('https://games-baatein.vercel.app', {
+            // Get WebSocket URL from environment or use default
+            const wsUrl = window.WEBSOCKET_URL || 'https://games-baatein.vercel.app';
+            console.log('🔌 Connecting to WebSocket:', wsUrl);
+            
+            this.socket = io(wsUrl, {
                 transports: ['websocket', 'polling']
             });
             
