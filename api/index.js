@@ -340,6 +340,120 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Request Play Again
+  socket.on('requestPlayAgain', (data) => {
+    try {
+      const { roomId } = data;
+      
+      if (!roomId) {
+        socket.emit('error', { message: 'Room ID is required' });
+        return;
+      }
+      
+      const room = activeRooms.get(roomId);
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' });
+        return;
+      }
+
+      const requestingPlayer = room.players.find(p => p.socketId === socket.id);
+      if (!requestingPlayer) {
+        socket.emit('error', { message: 'Player not found in room' });
+        return;
+      }
+
+      // Initialize playAgainRequests array if it doesn't exist
+      if (!room.playAgainRequests) {
+        room.playAgainRequests = [];
+      }
+
+      // Add this player to the requests if not already present
+      if (!room.playAgainRequests.includes(requestingPlayer.userId)) {
+        room.playAgainRequests.push(requestingPlayer.userId);
+      }
+
+      // Notify the other player about the request
+      const otherPlayer = room.players.find(p => p.socketId !== socket.id);
+      if (otherPlayer) {
+        io.to(otherPlayer.socketId).emit('playAgainRequested', {
+          from: requestingPlayer.username,
+          roomId: roomId
+        });
+        
+        socket.emit('playAgainRequestSent', {
+          message: 'Play again request sent to opponent'
+        });
+        
+        // Check if both players already want to play again
+        if (room.playAgainRequests.length >= 2) {
+          // Both players want to play again - reset immediately
+          resetGame(room);
+        }
+      } else {
+        socket.emit('error', { message: 'No opponent found' });
+      }
+    } catch (error) {
+      console.error('❌ Request play again error:', error);
+      socket.emit('error', { message: 'Failed to request play again' });
+    }
+  });
+
+  // Confirm Play Again
+  socket.on('confirmPlayAgain', (data) => {
+    try {
+      const { roomId } = data;
+      
+      if (!roomId) {
+        socket.emit('error', { message: 'Room ID is required' });
+        return;
+      }
+      
+      const room = activeRooms.get(roomId);
+      if (!room) {
+        socket.emit('error', { message: 'Room not found' });
+        return;
+      }
+
+      const confirmingPlayer = room.players.find(p => p.socketId === socket.id);
+      if (!confirmingPlayer) {
+        socket.emit('error', { message: 'Player not found in room' });
+        return;
+      }
+
+      // Initialize playAgainRequests array if it doesn't exist
+      if (!room.playAgainRequests) {
+        room.playAgainRequests = [];
+      }
+
+      // Add this player to the requests if not already present
+      if (!room.playAgainRequests.includes(confirmingPlayer.userId)) {
+        room.playAgainRequests.push(confirmingPlayer.userId);
+      }
+
+      // Check if both players want to play again
+      if (room.playAgainRequests.length >= 2) {
+        // Both players confirmed - reset the game
+        resetGame(room);
+      } else {
+        // Only one player confirmed so far
+        socket.emit('playAgainConfirmed', {
+          message: 'Waiting for opponent to confirm'
+        });
+        
+        // Notify the other player that you've confirmed
+        const otherPlayer = room.players.find(p => p.socketId !== socket.id);
+        if (otherPlayer) {
+          io.to(otherPlayer.socketId).emit('playAgainConfirmed', {
+            message: `${confirmingPlayer.username} wants to play again. Click "Play Again" to confirm!`
+          });
+        }
+      }
+    } catch (error) {
+      console.error('❌ Confirm play again error:', error);
+      socket.emit('error', { message: 'Failed to confirm play again' });
+    }
+  });
+
   // Leave Room
   socket.on('leaveRoom', () => {
     handlePlayerLeave(socket);
@@ -452,6 +566,30 @@ function startGame(room) {
   });
 
   console.log(`🎮 Game started in room ${room.roomId}`);
+}
+
+function resetGame(room) {
+  // Reset game state
+  room.gameState = initializeGame();
+  room.status = 'waiting';
+  room.currentTurn = null;
+  room.winner = null;
+  room.startTime = null;
+  room.endTime = null;
+  room.playAgainRequests = []; // Reset play again requests
+  
+  // Reset all players to not ready
+  room.players.forEach(player => {
+    player.ready = false;
+  });
+
+  // Notify both players that game is reset
+  io.to(room.roomId).emit('gameReset', {
+    room: sanitizeRoom(room),
+    message: 'Game reset! Both players need to mark ready to start again.'
+  });
+
+  console.log(`🔄 Game reset in room ${room.roomId}`);
 }
 
 function getNextPlayer(room, currentUserId) {

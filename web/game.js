@@ -208,6 +208,46 @@ class BaateinGame {
             }
         });
         
+        // Play Again events
+        this.socket.on('playAgainRequested', (data) => {
+            console.log('🔍 Play again requested by:', data.from);
+            this.showNotification(`${data.from} wants to play again. Click "Play Again" to confirm!`, 'info');
+            // Enable the play again button if it was disabled
+            if (this.playAgainBtn) {
+                this.playAgainBtn.disabled = false;
+                this.playAgainBtn.textContent = 'Confirm Play Again';
+            }
+        });
+        
+        this.socket.on('playAgainRequestSent', (data) => {
+            this.showNotification(data.message || 'Play again request sent!', 'info');
+        });
+        
+        this.socket.on('playAgainConfirmed', (data) => {
+            this.showNotification(data.message || 'Waiting for opponent...', 'info');
+        });
+        
+        this.socket.on('gameReset', (data) => {
+            console.log('🔍 Game reset:', data);
+            if (data.room) {
+                this.currentRoom = data.room;
+                this.gameState = data.room.gameState;
+                
+                // Hide game over screen and show waiting room
+                this.gameOver.style.display = 'none';
+                this.gameBoardContainer.style.display = 'none';
+                this.showWaitingRoom();
+                
+                // Reset play again button
+                if (this.playAgainBtn) {
+                    this.playAgainBtn.disabled = false;
+                    this.playAgainBtn.innerHTML = '<i class="fas fa-redo"></i> Play Again';
+                }
+                
+                this.showNotification(data.message || 'Game reset!', 'success');
+            }
+        });
+        
         this.socket.on('error', (data) => {
             this.showNotification(data.message || 'An error occurred', 'error');
         });
@@ -350,7 +390,18 @@ class BaateinGame {
     }
 
     makeMove(position) {
-        if (!this.socket || !this.currentRoom || this.currentRoom.status !== 'active') {
+        if (!this.socket || !this.currentRoom) {
+            this.showNotification('Not connected or no room', 'error');
+            return;
+        }
+        
+        if (this.currentRoom.status !== 'active') {
+            this.showNotification('Game is not active. Please wait for the game to start.', 'warning');
+            return;
+        }
+        
+        if (!this.gameState || !this.gameState.board) {
+            this.showNotification('Game state not ready', 'error');
             return;
         }
         
@@ -364,7 +415,10 @@ class BaateinGame {
             return;
         }
         
-        if (position < 0 || position > 8) return;
+        if (position < 0 || position > 8) {
+            console.error('Invalid move position:', position);
+            return;
+        }
         
         this.socket.emit('makeMove', {
             roomId: this.currentRoom.roomId,
@@ -408,15 +462,36 @@ class BaateinGame {
         
         this.gameOverTitle.textContent = title;
         this.gameOverMessage.textContent = message;
+        
+        // Reset play again button state
+        if (this.playAgainBtn) {
+            this.playAgainBtn.disabled = false;
+            this.playAgainBtn.innerHTML = '<i class="fas fa-redo"></i> Play Again';
+        }
     }
 
     playAgain() {
-        if (!this.socket || !this.currentRoom) return;
+        if (!this.socket || !this.currentRoom || !this.currentRoom.roomId) {
+            this.showNotification('Not connected or invalid room', 'error');
+            return;
+        }
         
-        this.currentRoom.status = 'waiting';
-        this.currentRoom.players.forEach(player => player.ready = false);
-        this.showWaitingRoom();
-        this.showNotification('Game reset!', 'info');
+        // Check if this is a confirmation (button text changed)
+        if (this.playAgainBtn && this.playAgainBtn.textContent.includes('Confirm')) {
+            // This is a confirmation - send confirm event
+            this.socket.emit('confirmPlayAgain', {
+                roomId: this.currentRoom.roomId
+            });
+            this.playAgainBtn.disabled = true;
+            this.playAgainBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Confirming...';
+        } else {
+            // This is a request - ask the other player
+            this.socket.emit('requestPlayAgain', {
+                roomId: this.currentRoom.roomId
+            });
+            this.playAgainBtn.disabled = true;
+            this.playAgainBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Requesting...';
+        }
     }
 
     leaveRoom() {
