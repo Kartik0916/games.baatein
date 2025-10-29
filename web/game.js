@@ -174,27 +174,37 @@ class BaateinGame {
         });
         
         this.socket.on('playerReadyUpdate', (data) => {
+            console.log('🔍 Player ready update received:', data);
+            if (data.players && this.currentRoom) {
+                // CRITICAL: Update the currentRoom.players array with fresh data
+                this.currentRoom.players = data.players.map(p => ({ ...p }));
+            }
             this.updatePlayersList(data.players);
             this.checkIfCanStart();
         });
         
         this.socket.on('gameStarted', (data) => {
+            console.log('🔍 Game started received:', data);
+            
             if (data.gameState && data.gameState.board) {
-                // Create a completely fresh game state - ensure board is empty array
+                // ALWAYS create completely fresh empty game state - ignore what server sends
+                // The server should send empty board, but we enforce it here too
                 const boardArray = Array.isArray(data.gameState.board) 
-                    ? data.gameState.board 
+                    ? [...data.gameState.board] 
                     : Array(9).fill(null);
                 
-                // Verify board is actually empty (should be for new game)
+                // FORCE empty board - new game should ALWAYS be empty
                 const isEmpty = boardArray.every(cell => cell === null);
                 
                 this.gameState = {
-                    board: isEmpty ? Array(9).fill(null) : [...boardArray],
-                    moves: data.gameState.moves ? [...data.gameState.moves] : [],
+                    board: Array(9).fill(null), // ALWAYS start with empty board
+                    moves: [],
                     winner: null,
                     isDraw: false,
                     gameOver: false
                 };
+                
+                console.log('🔍 New game state created:', this.gameState.board);
                 
                 if (this.currentRoom) {
                     this.currentRoom.status = 'active';
@@ -212,9 +222,12 @@ class BaateinGame {
                     existingCells.forEach(cell => cell.remove());
                 }
                 
-                this.showGameBoard();
-                this.updateGameStatus();
-                this.showNotification('Game started!', 'success');
+                // Small delay to ensure DOM is cleared before creating new board
+                setTimeout(() => {
+                    this.showGameBoard();
+                    this.updateGameStatus();
+                    this.showNotification('Game started with fresh board!', 'success');
+                }, 50);
             }
         });
         
@@ -420,7 +433,13 @@ class BaateinGame {
     }
 
     updatePlayersList(players = null) {
-        const playersToShow = players || this.currentRoom.players;
+        const playersToShow = players || (this.currentRoom ? this.currentRoom.players : []);
+        
+        // Also update currentRoom.players if players array is provided
+        if (players && this.currentRoom) {
+            this.currentRoom.players = players.map(p => ({ ...p }));
+        }
+        
         this.playersList.innerHTML = '';
         
         playersToShow.forEach(player => {
@@ -435,11 +454,24 @@ class BaateinGame {
             `;
             this.playersList.appendChild(playerItem);
         });
+        
+        console.log('🔍 Players list updated:', playersToShow.map(p => ({ username: p.username, ready: p.ready })));
     }
 
     checkIfCanStart() {
-        const allReady = this.currentRoom.players.every(p => p.ready);
-        const hasTwoPlayers = this.currentRoom.players.length === 2;
+        if (!this.currentRoom || !this.currentRoom.players) {
+            return;
+        }
+        
+        const players = this.currentRoom.players;
+        const allReady = players.length === 2 && players.every(p => p.ready === true);
+        const hasTwoPlayers = players.length === 2;
+        
+        console.log('🔍 Can start check:', {
+            playersCount: players.length,
+            allReady: allReady,
+            players: players.map(p => ({ username: p.username, ready: p.ready }))
+        });
         
         this.readyBtn.disabled = !hasTwoPlayers;
         
@@ -448,8 +480,9 @@ class BaateinGame {
             this.readyBtn.disabled = true;
         } else if (hasTwoPlayers) {
             this.readyBtn.innerHTML = '<i class="fas fa-check"></i> Ready to Play';
+            this.readyBtn.disabled = false;
         } else {
-            this.readyBtn.innerHTML = `<i class="fas fa-users"></i> Waiting for Players (${this.currentRoom.players.length}/2)`;
+            this.readyBtn.innerHTML = `<i class="fas fa-users"></i> Waiting for Players (${players.length}/2)`;
         }
     }
 

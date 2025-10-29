@@ -264,9 +264,21 @@ io.on('connection', (socket) => {
         }))
       });
 
-      // Start game if both players ready
-      if (room.players.length === 2 && room.players.every(p => p.ready)) {
-        startGame(room);
+      // Start game if both players ready - VERIFY before starting
+      const allReady = room.players.length === 2 && room.players.every(p => p.ready === true);
+      
+      console.log(`🔍 Player ready check:`, {
+        roomId: roomId,
+        playersCount: room.players.length,
+        allReady: allReady,
+        players: room.players.map(p => ({ username: p.username, ready: p.ready }))
+      });
+      
+      if (allReady) {
+        // Add small delay to ensure both players have updated their UI
+        setTimeout(() => {
+          startGame(room);
+        }, 100);
       }
     } catch (error) {
       console.error('❌ Player ready error:', error);
@@ -550,12 +562,39 @@ function sanitizeRoom(room) {
 }
 
 function startGame(room) {
+  // CRITICAL: Always create a fresh, empty game state when starting
+  room.gameState = initializeGame();
+  
+  // Verify both players are ready and there are exactly 2 players
+  if (room.players.length !== 2) {
+    console.error(`❌ Cannot start game - need 2 players, got ${room.players.length}`);
+    return;
+  }
+  
+  const allReady = room.players.every(p => p.ready === true);
+  if (!allReady) {
+    console.error(`❌ Cannot start game - not all players ready`);
+    console.log(`Players:`, room.players.map(p => ({ username: p.username, ready: p.ready })));
+    return;
+  }
+  
   room.status = 'active';
   room.currentTurn = room.players[0].userId;
   room.startTime = new Date();
+  room.winner = null;
+  room.endTime = null;
+
+  // Log the fresh game state to verify it's empty
+  console.log(`🎮 Game started in room ${room.roomId} with board:`, room.gameState.board);
 
   io.to(room.roomId).emit('gameStarted', {
-    gameState: room.gameState,
+    gameState: {
+      board: [...room.gameState.board], // Send fresh copy
+      moves: [],
+      winner: null,
+      isDraw: false,
+      gameOver: false
+    },
     currentTurn: room.currentTurn,
     players: room.players.map(p => ({ 
       userId: p.userId, 
@@ -565,11 +604,11 @@ function startGame(room) {
     }))
   });
 
-  console.log(`🎮 Game started in room ${room.roomId}`);
+  console.log(`🎮 Game started in room ${room.roomId} - both players ready`);
 }
 
 function resetGame(room) {
-  // Reset game state
+  // Reset game state - ALWAYS create completely fresh empty game
   room.gameState = initializeGame();
   room.status = 'waiting';
   room.currentTurn = null;
@@ -583,13 +622,35 @@ function resetGame(room) {
     player.ready = false;
   });
 
-  // Notify both players that game is reset
+  // Verify the board is actually empty
+  const isEmpty = room.gameState.board.every(cell => cell === null);
+  console.log(`🔄 Game reset in room ${room.roomId} - Board empty: ${isEmpty}`, room.gameState.board);
+
+  // Notify both players that game is reset - send fresh empty board
   io.to(room.roomId).emit('gameReset', {
-    room: sanitizeRoom(room),
+    room: {
+      roomId: room.roomId,
+      players: room.players.map(p => ({ 
+        userId: p.userId, 
+        username: p.username, 
+        avatar: p.avatar, 
+        symbol: p.symbol,
+        ready: false // Always false after reset
+      })),
+      status: 'waiting',
+      gameState: {
+        board: Array(9).fill(null), // ALWAYS send fresh empty board
+        moves: [],
+        winner: null,
+        isDraw: false,
+        gameOver: false
+      },
+      currentTurn: null
+    },
     message: 'Game reset! Both players need to mark ready to start again.'
   });
 
-  console.log(`🔄 Game reset in room ${room.roomId}`);
+  console.log(`🔄 Game reset in room ${room.roomId} - All players unready`);
 }
 
 function getNextPlayer(room, currentUserId) {
