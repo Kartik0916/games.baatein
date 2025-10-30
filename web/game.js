@@ -22,6 +22,7 @@ class BaateinGame {
         this.username = document.getElementById('username');
         this.logoutBtn = document.getElementById('logoutBtn');
         this.createRoomBtn = document.getElementById('createRoomBtn');
+        this.createLudoRoomBtn = document.getElementById('createLudoRoomBtn');
         this.joinRoomBtn = document.getElementById('joinRoomBtn');
         this.roomInput = document.getElementById('roomInput');
         this.roomCodeInput = document.getElementById('roomCodeInput');
@@ -59,7 +60,10 @@ class BaateinGame {
     setupEventListeners() {
         this.loginForm.addEventListener('submit', (e) => this.handleLogin(e));
         this.logoutBtn.addEventListener('click', () => this.handleLogout());
-        this.createRoomBtn.addEventListener('click', () => this.createRoom());
+        this.createRoomBtn.addEventListener('click', () => this.createRoom('tic-tac-toe'));
+        if (this.createLudoRoomBtn) {
+            this.createLudoRoomBtn.addEventListener('click', () => this.createRoom('ludo'));
+        }
         this.joinRoomBtn.addEventListener('click', () => this.showJoinRoomInput());
         this.joinWithCodeBtn.addEventListener('click', () => this.joinRoom());
         this.cancelJoinBtn.addEventListener('click', () => this.hideJoinRoomInput());
@@ -157,6 +161,7 @@ class BaateinGame {
             if (data.success && data.room) {
                 this.currentRoom = data.room;
                 this.showWaitingRoom();
+                this.renderMatchStats();
                 this.showNotification('Room created successfully!', 'success');
             } else {
                 this.showNotification('Failed to create room', 'error');
@@ -239,6 +244,8 @@ class BaateinGame {
                 }, 50);
             }
         });
+
+        // Ludo events are handled in LudoClient (instantiated on ludo:started)
         
         this.socket.on('moveMade', (data) => {
             if (data.gameState && data.gameState.board) {
@@ -473,7 +480,7 @@ class BaateinGame {
         });
     }
 
-    createRoom() {
+    createRoom(game = 'tic-tac-toe') {
         if (!this.socket || !this.user.userId || !this.user.username) {
             this.showNotification('Not connected or missing user info', 'error');
             return;
@@ -482,7 +489,8 @@ class BaateinGame {
         this.socket.emit('createRoom', {
             userId: this.user.userId,
             username: this.user.username,
-            avatar: this.user.avatar
+            avatar: this.user.avatar,
+            game
         });
     }
 

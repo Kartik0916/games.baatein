@@ -133,7 +133,7 @@ io.on('connection', (socket) => {
   // Create Room
   socket.on('createRoom', (data) => {
     try {
-      const { userId, username, avatar } = data;
+      const { userId, username, avatar, game } = data;
       
       if (!userId || !username) {
         socket.emit('error', { message: 'User ID and username are required' });
@@ -153,6 +153,7 @@ io.on('connection', (socket) => {
           symbol: 'X'
         }],
         status: 'waiting',
+        game: game === 'ludo' ? 'ludo' : 'tic-tac-toe',
         gameState: initializeGame(),
         currentTurn: null,
         createdAt: new Date()
@@ -337,6 +338,60 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('❌ Make move error:', error);
       socket.emit('error', { message: 'Failed to process move' });
+    }
+  });
+
+  // Ludo: roll dice
+  socket.on('ludo:rollDice', (data) => {
+    try {
+      const { roomId } = data;
+      const room = activeRooms.get(roomId);
+      if (!room || room.game !== 'ludo') return;
+      const player = room.players.find(p => p.socketId === socket.id);
+      if (!player) throw new Error('Player not found');
+      const engine = require('./ludo/engine');
+
+      const result = engine.rollDice(room.gameState, { userId: player.userId });
+      room.gameState = result.state;
+      const movable = engine.getMovableTokens(room.gameState, { userId: player.userId }, result.value);
+      io.to(roomId).emit('ludo:diceRolled', {
+        userId: player.userId,
+        value: result.value,
+        movableTokens: movable
+      });
+    } catch (e) {
+      console.error('Ludo rollDice error:', e);
+      socket.emit('error', { message: e.message || 'Ludo roll failed' });
+    }
+  });
+
+  // Ludo: move token
+  socket.on('ludo:moveToken', (data) => {
+    try {
+      const { roomId, tokenId, die } = data;
+      const room = activeRooms.get(roomId);
+      if (!room || room.game !== 'ludo') return;
+      const player = room.players.find(p => p.socketId === socket.id);
+      if (!player) throw new Error('Player not found');
+      const engine = require('./ludo/engine');
+      const res = engine.applyMove(room.gameState, { userId: player.userId }, tokenId, die);
+      room.gameState = res.state;
+      io.to(roomId).emit('ludo:tokenMoved', {
+        userId: player.userId,
+        tokenId,
+        from: res.from,
+        to: res.to,
+        captured: res.captured || null,
+        state: room.gameState
+      });
+      if (room.gameState.winner) {
+        endGame(room, { winner: room.gameState.winner, reason: 'ludo_win' });
+      } else {
+        io.to(roomId).emit('ludo:turnChanged', { nextUserId: room.gameState.currentTurnUserId });
+      }
+    } catch (e) {
+      console.error('Ludo moveToken error:', e);
+      socket.emit('error', { message: e.message || 'Move failed' });
     }
   });
 
@@ -775,15 +830,13 @@ function sanitizeRoom(room) {
       ready: p.ready 
     })),
     status: room.status,
+    game: room.game || 'tic-tac-toe',
     gameState: room.gameState,
     currentTurn: room.currentTurn
   };
 }
 
 function startGame(room) {
-  // CRITICAL: Always create a fresh, empty game state when starting
-  room.gameState = initializeGame();
-  
   // Verify both players are ready and there are exactly 2 players
   if (room.players.length !== 2) {
     console.error(`❌ Cannot start game - need 2 players, got ${room.players.length}`);
@@ -803,12 +856,33 @@ function startGame(room) {
   room.winner = null;
   room.endTime = null;
 
-  // Log the fresh game state to verify it's empty
+  if ((room.game || 'tic-tac-toe') === 'ludo') {
+    // Initialize Ludo state
+    const { initializeLudoState } = require('./ludo/engine');
+    const ludoPlayers = room.players.map((p, idx) => ({
+      userId: p.userId,
+      username: p.username,
+      color: idx === 0 ? 'red' : 'blue'
+    }));
+    room.gameState = initializeLudoState(ludoPlayers);
+    room.currentTurn = room.gameState.currentTurnUserId;
+
+    io.to(room.roomId).emit('ludo:started', {
+      state: room.gameState,
+      currentTurn: room.currentTurn,
+      players: room.players.map((p, idx) => ({ userId: p.userId, username: p.username, color: idx === 0 ? 'red' : 'blue' }))
+    });
+    console.log(`🎲 Ludo started in room ${room.roomId}`);
+    return;
+  }
+
+  // Tic Tac Toe default
+  room.gameState = initializeGame();
   console.log(`🎮 Game started in room ${room.roomId} with board:`, room.gameState.board);
 
   io.to(room.roomId).emit('gameStarted', {
     gameState: {
-      board: [...room.gameState.board], // Send fresh copy
+      board: [...room.gameState.board],
       moves: [],
       winner: null,
       isDraw: false,
@@ -822,8 +896,7 @@ function startGame(room) {
       symbol: p.symbol
     }))
   });
-
-  console.log(`🎮 Game started in room ${room.roomId} - both players ready`);
+  console.log(`🎮 Tic Tac Toe started in room ${room.roomId}`);
 }
 
 function resetGame(room) {
