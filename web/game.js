@@ -269,14 +269,6 @@ class BaateinGame {
                 // Draw line BEFORE hiding the board
                 this.drawWinningLine(data.winningLine);
                 
-                // Show fireworks only if this player won
-                if (data.winner === this.user.userId) {
-                    console.log('🎯 Creating fireworks for winner');
-                    setTimeout(() => {
-                        this.createFireworks();
-                    }, 800); // Faster - reduced from 1200ms to 800ms
-                }
-                
                 // Delay showing game over screen to see the line (shorter delay)
                 setTimeout(() => {
                     this.showGameOver(data);
@@ -884,6 +876,9 @@ class BaateinGame {
             }
             score = 'win';
             this.gameOverContent.classList.add('won');
+
+            // Add celebratory rays/glow behind the title
+            this.addWinnerCelebrationBackdrop();
         } else {
             title = 'You Lost!';
             if (data.reason === 'resignation') {
@@ -1402,6 +1397,11 @@ class BaateinGame {
             if (cryingFace) {
                 cryingFace.remove();
             }
+            // Remove winner celebration backdrop
+            const winnerBackdrop = this.gameOverContent.querySelector('.winner-celebration');
+            if (winnerBackdrop) {
+                winnerBackdrop.remove();
+            }
         }
         
         // Remove winning class from cells
@@ -1413,6 +1413,25 @@ class BaateinGame {
         moveAnimatedCells.forEach(cell => cell.classList.remove('move-animation'));
         
         console.log('🧹 All animations cleared');
+    }
+
+    // Add a rotating rays/glow backdrop behind the You Won title
+    addWinnerCelebrationBackdrop() {
+        if (!this.gameOverContent) return;
+        
+        // Ensure only one instance
+        const existing = this.gameOverContent.querySelector('.winner-celebration');
+        if (existing) existing.remove();
+        
+        const backdrop = document.createElement('div');
+        backdrop.className = 'winner-celebration';
+        
+        // Insert backdrop before the title, so it sits behind due to z-index
+        if (this.gameOverTitle && this.gameOverTitle.parentNode) {
+            this.gameOverTitle.parentNode.insertBefore(backdrop, this.gameOverTitle);
+        } else {
+            this.gameOverContent.prepend(backdrop);
+        }
     }
 }
 

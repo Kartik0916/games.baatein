@@ -577,7 +577,7 @@ body {
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 9999; /* Reduced from 10000 - below game over text */
+    z-index: 4000; /* Keep effects behind the game-over panel */
     overflow: hidden;
 }
 
@@ -681,7 +681,7 @@ body {
 /* Game Over Screen Enhancements - Fixed positioning */
 .game-over-content {
     position: relative;
-    z-index: 1; /* Ensure content is above animations */
+    z-index: 10010; /* Above fireworks and other effects */
 }
 
 .game-over-content.won::before {
@@ -695,14 +695,43 @@ body {
     z-index: 1;
 }
 
-.game-over-content.lost::before {
-    content: '😢';
+/* Remove pseudo-element on loser to avoid duplicate with JS crying face */
+.game-over-content.lost::before { display: none; }
+
+/* Ensure the whole game-over block sits above effects */
+.game-over {
+    position: relative;
+    z-index: 10005;
+}
+
+/* Winner celebration backdrop - rotating sunburst + glow behind title */
+.winner-celebration {
     position: absolute;
-    font-size: 4rem; /* Reduced from 5rem to avoid covering text */
-    top: -50px; /* Reduced from -60px */
+    top: -30px; /* sits behind the title */
     left: 50%;
     transform: translateX(-50%);
-    z-index: 1;
+    width: 260px;
+    height: 160px;
+    pointer-events: none;
+    z-index: 1; /* below h2/p which have higher z-index */
+    border-radius: 50% / 40%;
+    background:
+      radial-gradient(circle at 50% 60%, rgba(255, 215, 0, 0.35) 0%, rgba(255, 215, 0, 0.18) 35%, rgba(255, 215, 0, 0) 68%),
+      repeating-conic-gradient(from 0deg,
+        rgba(255, 200, 0, 0.35) 0 12deg,
+        transparent 12deg 24deg);
+    animation: winnerRaysSpin 8s linear infinite, winnerGlowPulse 2.2s ease-in-out infinite;
+    filter: drop-shadow(0 8px 24px rgba(255, 200, 0, 0.35));
+}
+
+@keyframes winnerRaysSpin {
+    0% { transform: translateX(-50%) rotate(0deg); }
+    100% { transform: translateX(-50%) rotate(360deg); }
+}
+
+@keyframes winnerGlowPulse {
+    0%, 100% { opacity: 0.9; }
+    50% { opacity: 1; }
 }
 
 @keyframes celebrate {
