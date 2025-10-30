@@ -15,6 +15,7 @@ class BaateinGame {
 
     initializeElements() {
         this.loginScreen = document.getElementById('loginScreen');
+        this.gameSelection = document.getElementById('gameSelection');
         this.gameScreen = document.getElementById('gameScreen');
         this.loginForm = document.getElementById('loginForm');
         this.usernameInput = document.getElementById('usernameInput');
@@ -23,6 +24,8 @@ class BaateinGame {
         this.logoutBtn = document.getElementById('logoutBtn');
         this.createRoomBtn = document.getElementById('createRoomBtn');
         this.createLudoRoomBtn = document.getElementById('createLudoRoomBtn');
+        this.selectTicTacToeBtn = document.getElementById('selectTicTacToe');
+        this.selectLudoBtn = document.getElementById('selectLudo');
         this.joinRoomBtn = document.getElementById('joinRoomBtn');
         this.roomInput = document.getElementById('roomInput');
         this.roomCodeInput = document.getElementById('roomCodeInput');
@@ -55,14 +58,21 @@ class BaateinGame {
         this.seriesStats = {}; // keyed by opponent userId
         this.loadingOverlay = document.getElementById('loadingOverlay');
         this.notifications = document.getElementById('notifications');
+        this.selectedGame = null;
     }
 
     setupEventListeners() {
         this.loginForm.addEventListener('submit', (e) => this.handleLogin(e));
         this.logoutBtn.addEventListener('click', () => this.handleLogout());
-        this.createRoomBtn.addEventListener('click', () => this.createRoom('tic-tac-toe'));
+        this.createRoomBtn.addEventListener('click', () => this.createRoom(this.selectedGame || 'tic-tac-toe'));
         if (this.createLudoRoomBtn) {
             this.createLudoRoomBtn.addEventListener('click', () => this.createRoom('ludo'));
+        }
+        if (this.selectTicTacToeBtn) {
+            this.selectTicTacToeBtn.addEventListener('click', () => this.selectGame('tic-tac-toe'));
+        }
+        if (this.selectLudoBtn) {
+            this.selectLudoBtn.addEventListener('click', () => this.selectGame('ludo'));
         }
         this.joinRoomBtn.addEventListener('click', () => this.showJoinRoomInput());
         this.joinWithCodeBtn.addEventListener('click', () => this.joinRoom());
@@ -86,10 +96,27 @@ class BaateinGame {
 
     showGameScreen() {
         this.loginScreen.style.display = 'none';
+        this.gameSelection.style.display = 'none';
         this.gameScreen.style.display = 'block';
         this.userInfo.style.display = 'flex';
         // Show initial stats immediately
         this.renderMatchStats();
+    }
+
+    showGameSelection() {
+        this.loginScreen.style.display = 'none';
+        this.userInfo.style.display = 'flex';
+        this.gameSelection.style.display = 'block';
+        this.gameScreen.style.display = 'none';
+    }
+
+    selectGame(game) {
+        this.selectedGame = game;
+        // Update the subsequent screen to reflect selection and go to room screen
+        this.showGameScreen();
+        // Update waiting room header label
+        const gameNameEl = document.getElementById('gameName');
+        if (gameNameEl) gameNameEl.textContent = game === 'ludo' ? 'Ludo' : 'Tic Tac Toe';
     }
 
     async handleLogin(e) {
@@ -109,7 +136,7 @@ class BaateinGame {
             this.user = { userId, username, avatar };
             await this.connectToServer();
             this.username.textContent = username;
-            this.showGameScreen();
+            this.showGameSelection();
             this.showNotification(`Welcome, ${username}!`, 'success');
         } catch (error) {
             console.error('Login error:', error);
@@ -243,6 +270,22 @@ class BaateinGame {
                     this.showNotification('Game started with fresh board!', 'success');
                 }, 50);
             }
+        });
+
+        // Ludo start: create client, mount, and render immediately
+        this.socket.on('ludo:started', (data) => {
+            // Switch UI to game board
+            if (this.waitingRoom) this.waitingRoom.style.display = 'none';
+            if (this.gameBoardContainer) this.gameBoardContainer.style.display = 'block';
+            if (!this.ludo) {
+                this.ludo = new window.LudoClient(this.socket, this.user, this.currentRoom);
+                this.ludo.mount(this.gameBoardContainer);
+            }
+            this.currentRoom.status = 'active';
+            this.currentRoom.currentTurn = data.currentTurn;
+            this.ludo.state = data.state;
+            this.ludo.room = this.currentRoom;
+            this.ludo.render();
         });
 
         // Ludo events are handled in LudoClient (instantiated on ludo:started)
@@ -569,6 +612,12 @@ class BaateinGame {
         
         // Show waiting room
         this.waitingRoom.style.display = 'block';
+        // Update game name dynamically
+        const gameNameEl = document.getElementById('gameName');
+        if (gameNameEl) {
+            const g = (this.currentRoom && this.currentRoom.game) ? this.currentRoom.game : 'tic-tac-toe';
+            gameNameEl.textContent = g === 'ludo' ? 'Ludo' : 'Tic Tac Toe';
+        }
         // Chat removed
         
         // Update room code if room exists
