@@ -1430,9 +1430,10 @@ class BaateinGame {
         document.body.appendChild(container);
         
         const colors = ['#ff577f', '#ff884b', '#ffd166', '#06d6a0', '#118ab2', '#9c6efb'];
-        const total = 150; // visible but performant
-        const durationMin = 1500;
-        const durationMax = 2500;
+        const total = 320; // more pieces over longer time
+        const durationMin = 1800;
+        const durationMax = 3600;
+        const maxDelay = 8500; // spread creation over ~8.5s
         
         for (let i = 0; i < total; i++) {
             const piece = document.createElement('div');
@@ -1446,7 +1447,7 @@ class BaateinGame {
             piece.style.background = colors[Math.floor(Math.random() * colors.length)];
             
             // Staggered start and varied duration
-            const delay = Math.random() * 400; // ms
+            const delay = Math.random() * maxDelay; // ms
             const duration = durationMin + Math.random() * (durationMax - durationMin);
             piece.style.animationDelay = `${delay / 1000}s`;
             piece.style.animationDuration = `${duration / 1000}s`;
@@ -1462,10 +1463,10 @@ class BaateinGame {
             }, delay + duration + 200);
         }
         
-        // Remove container after the rain ends
+        // Remove container after the rain ends (~10s)
         setTimeout(() => {
             if (container.parentNode) container.remove();
-        }, 3000);
+        }, 10000);
     }
 }
 

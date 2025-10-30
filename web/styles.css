@@ -684,16 +684,8 @@ body {
     z-index: 10010; /* Above fireworks and other effects */
 }
 
-.game-over-content.won::before {
-    content: '🎉';
-    position: absolute;
-    font-size: 4rem; /* Reduced from 5rem to avoid covering text */
-    top: -50px; /* Reduced from -60px */
-    left: 50%;
-    transform: translateX(-50%);
-    animation: celebrate 0.8s ease-out infinite; /* Faster: 1s -> 0.8s */
-    z-index: 1;
-}
+/* Remove emoji backdrop on winner screen as requested */
+.game-over-content.won::before { display: none; }
 
 /* Remove pseudo-element on loser to avoid duplicate with JS crying face */
 .game-over-content.lost::before { display: none; }
