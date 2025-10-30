@@ -178,16 +178,7 @@ class LudoClient {
             this.boardEl.appendChild(t);
         });
 
-        // goal/home squares
-        const redHome = document.createElement('div');
-        redHome.className = 'goal-home red';
-        redHome.style.left = '20%'; redHome.style.top = '20%';
-        this.boardEl.appendChild(redHome);
-
-        const blueHome = document.createElement('div');
-        blueHome.className = 'goal-home blue';
-        blueHome.style.left = '80%'; blueHome.style.top = '80%';
-        this.boardEl.appendChild(blueHome);
+        // goal/home boxes now drawn via SVG background to match reference
     }
 
     buildCoords() {
@@ -215,9 +206,9 @@ class LudoClient {
             blue: [cell(7,13),cell(7,12),cell(7,11),cell(7,10),cell(7,9),cell(7,8)]
         };
         const home = {
-            red: [ cell(1.6,1.6), cell(3.4,1.6), cell(1.6,3.4), cell(3.4,3.4) ],
-            // Pull blue tokens slightly inward so they sit well within the home box
-            blue:[ cell(11.6,11.6), cell(13.4,11.6), cell(11.6,13.4), cell(13.4,13.4) ]
+            red: [ cell(1.7,1.7), cell(3.3,1.7), cell(1.7,3.3), cell(3.3,3.3) ],
+            // Blue home further inward to guarantee it stays inside the inner white square
+            blue:[ cell(11.8,11.8), cell(13.2,11.8), cell(11.8,13.2), cell(13.2,13.2) ]
         };
         const goal = { red: cell(7,7), blue: cell(7,7) };
         return { track, lane, home, goal };
