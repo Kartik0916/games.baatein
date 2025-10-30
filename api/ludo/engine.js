@@ -42,6 +42,7 @@ function initializeLudoState(playersInput) {
     currentTurnUserId: players[0]?.userId || null,
     lastRoll: null,
     diceHistory: [],
+    awaitingMoveForUserId: null,
     winner: null
   };
 }
@@ -54,6 +55,8 @@ function rollDice(state, player) {
   next.diceHistory = state.diceHistory.concat(value);
   const p = getPlayer(next, player.userId);
   p.consecutiveSixes = value === 6 ? (p.consecutiveSixes + 1) : 0;
+  // After a roll, the roller must make a move before another roll
+  next.awaitingMoveForUserId = player.userId;
   return { state: next, value };
 }
 
@@ -63,12 +66,27 @@ function getMovableTokens(state, player, die) {
   const startIndex = state.startIndexByColor[p.color];
   const laneEntry = state.laneEntryIndex[p.color];
   const result = [];
+  const occupiedBy = (posType, index) => {
+    for (const pl of state.players) {
+      for (const t of pl.tokens) {
+        if (t.posType === posType && t.index === index) return pl.userId;
+      }
+    }
+    return null;
+  };
 
   // If die is 6, can spawn from home to start
   if (die === 6) {
     const homeTokens = tokens.filter(t => t.posType === 'home');
     if (homeTokens.length > 0) {
-      result.push({ tokenId: homeTokens[0].id, move: 'spawn', to: { posType: 'track', index: startIndex } });
+      const occ = occupiedBy('track', startIndex);
+      const isSafe = state.safeTiles.includes(startIndex);
+      // Spawn allowed if empty, or own token present, or opponent present on non-safe (capture)
+      if (!occ || occ === p.userId || (!isSafe && occ !== p.userId)) {
+        homeTokens.forEach(ht => {
+          result.push({ tokenId: ht.id, move: 'spawn', to: { posType: 'track', index: startIndex } });
+        });
+      }
     }
   }
 
@@ -82,7 +100,12 @@ function getMovableTokens(state, player, die) {
           result.push({ tokenId: t.id, move: 'toLane', to: { posType: 'lane', index: stepsIntoLane - 1 } });
         }
       } else {
-        result.push({ tokenId: t.id, move: 'advance', to: { posType: 'track', index: destTrackIndex } });
+        // Allow moving onto dest if empty or own stack or opponent on non-safe
+        const occ = occupiedBy('track', destTrackIndex);
+        const isSafe = state.safeTiles.includes(destTrackIndex);
+        if (!occ || occ === p.userId || (!isSafe && occ !== p.userId)) {
+          result.push({ tokenId: t.id, move: 'advance', to: { posType: 'track', index: destTrackIndex } });
+        }
       }
     } else if (t.posType === 'lane') {
       const newLaneIndex = t.index + die;
@@ -109,6 +132,8 @@ function applyMove(state, player, tokenId, die) {
   const from = { posType: token.posType, index: token.index };
   token.posType = legal.to.posType;
   token.index = legal.to.index;
+  // clear awaiting move
+  next.awaitingMoveForUserId = null;
 
   let captured = null;
   if (token.posType === 'track') {

@@ -349,6 +349,10 @@ io.on('connection', (socket) => {
       if (!room || room.game !== 'ludo') return;
       const player = room.players.find(p => p.socketId === socket.id);
       if (!player) throw new Error('Player not found');
+      // Prevent rolling twice before moving
+      if (room.gameState.awaitingMoveForUserId) {
+        throw new Error('Please complete your move before rolling again');
+      }
       const engine = require('./ludo/engine');
 
       const result = engine.rollDice(room.gameState, { userId: player.userId });
@@ -359,6 +363,16 @@ io.on('connection', (socket) => {
         value: result.value,
         movableTokens: movable
       });
+      // If no moves and die is not 6, auto-pass turn
+      if ((!movable || movable.length === 0) && result.value !== 6) {
+        // clear awaiting move
+        room.gameState.awaitingMoveForUserId = null;
+        // pass turn
+        const idx = room.players.findIndex(p => p.userId === room.gameState.currentTurnUserId);
+        const nextIdx = (idx + 1) % room.players.length;
+        room.gameState.currentTurnUserId = room.players[nextIdx].userId;
+        io.to(roomId).emit('ludo:turnChanged', { nextUserId: room.gameState.currentTurnUserId });
+      }
     } catch (e) {
       console.error('Ludo rollDice error:', e);
       socket.emit('error', { message: e.message || 'Ludo roll failed' });

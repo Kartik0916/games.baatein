@@ -23,7 +23,6 @@ class BaateinGame {
         this.username = document.getElementById('username');
         this.logoutBtn = document.getElementById('logoutBtn');
         this.createRoomBtn = document.getElementById('createRoomBtn');
-        this.createLudoRoomBtn = document.getElementById('createLudoRoomBtn');
         this.selectTicTacToeBtn = document.getElementById('selectTicTacToe');
         this.selectLudoBtn = document.getElementById('selectLudo');
         this.joinRoomBtn = document.getElementById('joinRoomBtn');
@@ -65,9 +64,6 @@ class BaateinGame {
         this.loginForm.addEventListener('submit', (e) => this.handleLogin(e));
         this.logoutBtn.addEventListener('click', () => this.handleLogout());
         this.createRoomBtn.addEventListener('click', () => this.createRoom(this.selectedGame || 'tic-tac-toe'));
-        if (this.createLudoRoomBtn) {
-            this.createLudoRoomBtn.addEventListener('click', () => this.createRoom('ludo'));
-        }
         if (this.selectTicTacToeBtn) {
             this.selectTicTacToeBtn.addEventListener('click', () => this.selectGame('tic-tac-toe'));
         }
@@ -117,6 +113,14 @@ class BaateinGame {
         // Update waiting room header label
         const gameNameEl = document.getElementById('gameName');
         if (gameNameEl) gameNameEl.textContent = game === 'ludo' ? 'Ludo' : 'Tic Tac Toe';
+        // Update create room button label/icon
+        if (this.createRoomBtn) {
+            if (game === 'ludo') {
+                this.createRoomBtn.innerHTML = '<i class="fas fa-dice-six"></i> Create Ludo Room';
+            } else {
+                this.createRoomBtn.innerHTML = '<i class="fas fa-plus"></i> Create Room';
+            }
+        }
     }
 
     async handleLogin(e) {
