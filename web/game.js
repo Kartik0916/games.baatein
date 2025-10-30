@@ -49,6 +49,7 @@ class BaateinGame {
         this.chatInput = null;
         this.sendMessageBtn = null;
         this.matchStats = document.getElementById('matchStats');
+        this.matchStatsBar = document.getElementById('matchStatsBar');
         this.sessionStats = { wins: 0, losses: 0, draws: 0 };
         this.seriesStats = {}; // keyed by opponent userId
         this.loadingOverlay = document.getElementById('loadingOverlay');
@@ -83,6 +84,8 @@ class BaateinGame {
         this.loginScreen.style.display = 'none';
         this.gameScreen.style.display = 'block';
         this.userInfo.style.display = 'flex';
+        // Show initial stats immediately
+        this.renderMatchStats();
     }
 
     async handleLogin(e) {
@@ -905,9 +908,11 @@ class BaateinGame {
         
         // Add simple crying emoji before title for loss
         if (score === 'loss') {
-            this.gameOverTitle.textContent = '😭 ' + title;
+            this.gameOverTitle.textContent = '😢 ' + title;
+            this.gameOverTitle.classList.add('emoji-bounce');
         } else {
             this.gameOverTitle.textContent = title;
+            this.gameOverTitle.classList.remove('emoji-bounce');
         }
         this.gameOverMessage.textContent = message;
         
@@ -1366,19 +1371,37 @@ class BaateinGame {
         if (!this.matchStats) return;
         const s = this.sessionStats || { wins: 0, losses: 0, draws: 0 };
         const series = this.currentOpponentId ? (this.seriesStats[this.currentOpponentId] || { wins: 0, losses: 0, draws: 0 }) : null;
-        
-        const oppLabel = this.currentOpponentName ? `vs ${this.currentOpponentName}` : 'Current Opponent';
-        const seriesHtml = series ? `
-            <div class="stats-row"><strong>${oppLabel}:</strong> ${series.wins}W - ${series.losses}L${series.draws ? ` - ${series.draws}D` : ''}</div>
-        ` : '';
-        
-        this.matchStats.innerHTML = `
+
+        const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+        const oppLabel = this.currentOpponentName ? `vs ${this.currentOpponentName}` : 'Current opponent';
+
+        const sessionLine = `
+            <div class="stats-row">
+                <span class="stats-label">Session</span>
+                <span class="stats-value">${plural(s.wins, 'win')} — ${plural(s.losses, 'loss')}${s.draws ? ` — ${plural(s.draws, 'draw')}` : ''}</span>
+            </div>`;
+
+        const seriesLine = series ? `
+            <div class="stats-row">
+                <span class="stats-label">${oppLabel}</span>
+                <span class="stats-value">${plural(series.wins, 'win')} — ${plural(series.losses, 'loss')}${series.draws ? ` — ${plural(series.draws, 'draw')}` : ''}</span>
+            </div>` : '';
+
+        const html = `
             <div class="stats-card">
-                <div class="stats-row"><strong>Session:</strong> ${s.wins}W - ${s.losses}L${s.draws ? ` - ${s.draws}D` : ''}</div>
-                ${seriesHtml}
+                ${sessionLine}
+                ${seriesLine}
             </div>
         `;
-        this.matchStats.style.display = 'block';
+        // Update both locations
+        if (this.matchStats) {
+            this.matchStats.innerHTML = html;
+            this.matchStats.style.display = 'block';
+        }
+        if (this.matchStatsBar) {
+            this.matchStatsBar.innerHTML = html;
+            this.matchStatsBar.style.display = 'flex';
+        }
     }
 
     // Confetti rain across the screen

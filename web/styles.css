@@ -784,13 +784,47 @@ body {
 
 /* Match stats card */
 .stats-card {
-    background: #f8f9fa;
+    background: #ffffff;
     border: 1px solid #e9ecef;
-    border-radius: 10px;
-    padding: 0.75rem 1rem;
-    display: inline-block;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
 }
-.stats-row { color: #333; }
+.stats-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    color: #333;
+    min-width: 260px;
+}
+.stats-label {
+    font-weight: 700;
+}
+.stats-value {
+    font-weight: 600;
+    color: #222;
+}
+
+/* Always-visible stats bar container */
+.match-stats-bar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 1rem;
+}
+
+/* Subtle emoji animation for loss title */
+.emoji-bounce {
+    display: inline-block;
+    animation: emojiBounce 1.8s ease-in-out infinite;
+}
+
+@keyframes emojiBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+}
 
 /* Chat Section */
 .chat-section {
