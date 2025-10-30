@@ -876,9 +876,11 @@ class BaateinGame {
             }
             score = 'win';
             this.gameOverContent.classList.add('won');
-
-            // Add celebratory rays/glow behind the title
-            this.addWinnerCelebrationBackdrop();
+            
+            // Confetti rain across the screen
+            setTimeout(() => {
+                this.createConfettiRain();
+            }, 200);
         } else {
             title = 'You Lost!';
             if (data.reason === 'resignation') {
@@ -1383,9 +1385,11 @@ class BaateinGame {
         const fireworks = document.querySelectorAll('.firework');
         fireworks.forEach(fw => fw.remove());
         
-        // Remove all confetti
+        // Remove all confetti & containers
         const confetti = document.querySelectorAll('.confetti');
         confetti.forEach(c => c.remove());
+        const confettiContainers = document.querySelectorAll('.confetti-container');
+        confettiContainers.forEach(cc => cc.remove());
         
         // Remove winning lines
         const winningLines = document.querySelectorAll('.winning-line');
@@ -1415,23 +1419,53 @@ class BaateinGame {
         console.log('🧹 All animations cleared');
     }
 
-    // Add a rotating rays/glow backdrop behind the You Won title
-    addWinnerCelebrationBackdrop() {
-        if (!this.gameOverContent) return;
-        
-        // Ensure only one instance
-        const existing = this.gameOverContent.querySelector('.winner-celebration');
+    // Confetti rain across the screen
+    createConfettiRain() {
+        // Avoid duplicates
+        const existing = document.querySelector('.confetti-container');
         if (existing) existing.remove();
         
-        const backdrop = document.createElement('div');
-        backdrop.className = 'winner-celebration';
+        const container = document.createElement('div');
+        container.className = 'confetti-container';
+        document.body.appendChild(container);
         
-        // Insert backdrop before the title, so it sits behind due to z-index
-        if (this.gameOverTitle && this.gameOverTitle.parentNode) {
-            this.gameOverTitle.parentNode.insertBefore(backdrop, this.gameOverTitle);
-        } else {
-            this.gameOverContent.prepend(backdrop);
+        const colors = ['#ff577f', '#ff884b', '#ffd166', '#06d6a0', '#118ab2', '#9c6efb'];
+        const total = 150; // visible but performant
+        const durationMin = 1500;
+        const durationMax = 2500;
+        
+        for (let i = 0; i < total; i++) {
+            const piece = document.createElement('div');
+            piece.className = 'confetti';
+            
+            // Random starting X position and size
+            piece.style.left = `${Math.random() * 100}%`;
+            const size = 6 + Math.random() * 8;
+            piece.style.width = `${size}px`;
+            piece.style.height = `${size}px`;
+            piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+            
+            // Staggered start and varied duration
+            const delay = Math.random() * 400; // ms
+            const duration = durationMin + Math.random() * (durationMax - durationMin);
+            piece.style.animationDelay = `${delay / 1000}s`;
+            piece.style.animationDuration = `${duration / 1000}s`;
+            
+            // Slight random rotation via CSS variable
+            piece.style.setProperty('--rotate', `${Math.random() * 720}deg`);
+            
+            container.appendChild(piece);
+            
+            // Cleanup each piece after it finishes
+            setTimeout(() => {
+                if (piece.parentNode) piece.remove();
+            }, delay + duration + 200);
         }
+        
+        // Remove container after the rain ends
+        setTimeout(() => {
+            if (container.parentNode) container.remove();
+        }, 3000);
     }
 }
 
