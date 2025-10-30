@@ -60,6 +60,7 @@ class LudoClient {
         const oppDie = document.createElement('div');
         oppDie.className = 'die';
         this.buildDiePips(oppDie);
+        this.oppDie = oppDie;
         oppDice.appendChild(oppLabel);
         oppDice.appendChild(oppDie);
 
@@ -135,6 +136,13 @@ class LudoClient {
 
         // Dice UI state
         this.setDieValue(this.diceEl, this.currentDie || 0);
+        // Show opponent's last value if known (kept in state.diceHistory)
+        if (Array.isArray(this.state?.diceHistory) && this.state.diceHistory.length > 0 && this.oppDie) {
+            const last = this.state.diceHistory[this.state.diceHistory.length - 1];
+            // only display on opp die if it wasn't my roll
+            const myTurn = this.state.currentTurnUserId === this.user.userId;
+            if (!myTurn) this.setDieValue(this.oppDie, last);
+        }
         const myTurn = this.state.currentTurnUserId === this.user.userId;
         this.rollBtn.disabled = !myTurn;
         this.turnBannerEl.textContent = myTurn ? 'Your turn' : `${this.getUsername(this.state.currentTurnUserId)}'s turn`;
@@ -225,21 +233,26 @@ class LudoClient {
         const cellC = (x,y)=>({ cx: x*cellSize + cellSize/2, cy: y*cellSize + cellSize/2 });
         const star=(x,y,color='#f5c518')=>{ const {cx,cy}=cellC(x,y); const r=3; const p=document.createElementNS('http://www.w3.org/2000/svg','path'); p.setAttribute('fill', color); p.setAttribute('d', `M ${cx} ${cy-r} L ${cx+r*0.588} ${cy+r*0.809} L ${cx-r} ${cy- r*0.309} L ${cx+r} ${cy- r*0.309} L ${cx-r*0.588} ${cy+r*0.809} Z`); return p; };
         const arrow=(x,y,dir,fill='#27ae60')=>{ const {cx,cy}=cellC(x,y); const d=4; let pts=''; if(dir==='down'){ pts=`${cx-d},${cy-d} ${cx+d},${cy-d} ${cx},${cy+d}`;} else if(dir==='up'){ pts=`${cx-d},${cy+d} ${cx+d},${cy+d} ${cx},${cy-d}`;} else if(dir==='left'){ pts=`${cx+d},${cy-d} ${cx+d},${cy+d} ${cx-d},${cy}`;} else { pts=`${cx-d},${cy-d} ${cx-d},${cy+d} ${cx+d},${cy}`;} const p=document.createElementNS('http://www.w3.org/2000/svg','polygon'); p.setAttribute('points', pts); p.setAttribute('fill', fill); return p; };
-        // 4 colored homes (visuals only; gameplay stays 2-player)
-        add(rect(10,10,40,40,'#ffccd2','#f5c2c7')); // red
-        add(rect(100,10,40,40,'#fff3bf','#ffe8a1')); // yellow
-        add(rect(10,100,40,40,'#d1f7c4','#b2f2bb')); // green
-        add(rect(100,100,40,40,'#cfe0ff','#cfe2ff')); // blue
+        // Quadrant backgrounds (match provided board):
+        add(rect(0,0,60,60,'#ffd83b')); // Yellow (top-left)
+        add(rect(90,0,60,60,'#1ebf61')); // Green (top-right)
+        add(rect(0,90,60,60,'#2e6bf6')); // Blue (bottom-left)
+        add(rect(90,90,60,60,'#e4373d')); // Red (bottom-right)
+        // Inner white squares inside quadrants
+        add(rect(12,12,36,36,'#ffffff','#999'));
+        add(rect(102,12,36,36,'#ffffff','#999'));
+        add(rect(12,102,36,36,'#ffffff','#999'));
+        add(rect(102,102,36,36,'#ffffff','#999'));
+        // Colored home lanes (3 cells wide strips) towards center
+        add(rect(70,0,10,60,'#ffd83b'));
+        add(rect(90,70,60,10,'#e4373d'));
+        add(rect(0,70,60,10,'#2e6bf6'));
+        add(rect(70,90,10,60,'#1ebf61'));
         // Center triangles
         add(poly('65,65 85,65 75,75','#2ecc71'));
-        add(poly('85,65 85,85 75,75','#f1c40f'));
-        add(poly('65,65 65,85 75,75','#e74c3c'));
-        add(poly('65,85 85,85 75,75','#3498db'));
-        // Simple grid lines along lanes
-        for(let i=0;i<6;i++){
-            const y=15+i*5; add(rect(70,y,10,1,'#dbeafe')); // red lane
-            const y2=85-i*5; add(rect(70,y2,10,1,'#dbeafe')); // blue lane
-        }
+        add(poly('85,65 85,85 75,75','#ffd83b'));
+        add(poly('65,65 65,85 75,75','#e4373d'));
+        add(poly('65,85 85,85 75,75','#2e6bf6'));
         // Safe stars tuned to the board
         add(star(2,7)); // left mid
         add(star(7,12)); // bottom mid
@@ -294,14 +307,22 @@ class LudoClient {
         });
 
         this.socket.on('ludo:diceRolled', (data) => {
-            this.currentDie = data.value;
+            const rolledByMe = data.userId === this.user.userId;
+            this.currentDie = rolledByMe ? data.value : 0;
             this.movable = data.movableTokens || [];
             // roll animation on your die
-            if (this.diceEl) {
+            if (this.diceEl && rolledByMe) {
                 this.diceEl.classList.remove('rolling');
                 // force reflow
                 void this.diceEl.offsetWidth;
                 this.diceEl.classList.add('rolling');
+            }
+            // opponent die update
+            if (this.oppDie && !rolledByMe) {
+                this.setDieValue(this.oppDie, data.value);
+                this.oppDie.classList.remove('rolling');
+                void this.oppDie.offsetWidth;
+                this.oppDie.classList.add('rolling');
             }
             if (this.movable.length === 0 && this.state && this.state.currentTurnUserId === this.user.userId) {
                 // show a brief hint near dice
@@ -314,6 +335,7 @@ class LudoClient {
         this.socket.on('ludo:tokenMoved', (data) => {
             this.state = data.state;
             this.currentDie = 0;
+            if (this.oppDie) this.setDieValue(this.oppDie, 0);
             this.movable = [];
             // update opponent avatar/label when both players are known
             const opp = (this.state.players || []).find(p => p.userId !== this.user.userId);
@@ -328,6 +350,7 @@ class LudoClient {
         this.socket.on('ludo:turnChanged', (data) => {
             if (this.state) this.state.currentTurnUserId = data.nextUserId;
             this.currentDie = 0;
+            if (this.oppDie) this.setDieValue(this.oppDie, 0);
             this.movable = [];
             const opp = (this.state.players || []).find(p => p.userId !== this.user.userId);
             if (opp) {
