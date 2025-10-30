@@ -257,6 +257,17 @@ class LudoClient {
             }
         });
 
+        // Full state sync for late join or refresh
+        this.socket.on('ludo:state', (data) => {
+            if (!data || !data.state) return;
+            this.state = data.state;
+            if (data.currentTurn) this.state.currentTurnUserId = data.currentTurn;
+            this.room.currentTurn = data.currentTurn || this.room.currentTurn;
+            // ensure mount exists
+            if (!this.container) this.mount(document.getElementById('gameBoardContainer'));
+            this.render();
+        });
+
         this.socket.on('ludo:diceRolled', (data) => {
             this.currentDie = data.value;
             this.movable = data.movableTokens || [];

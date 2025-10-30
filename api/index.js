@@ -409,6 +409,23 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Ludo: snapshot state for late join/reconnect
+  socket.on('ludo:snapshot', (data) => {
+    try {
+      const { roomId } = data || {};
+      const room = activeRooms.get(roomId);
+      if (!room || room.game !== 'ludo') return;
+      io.to(socket.id).emit('ludo:state', {
+        state: room.gameState,
+        currentTurn: room.gameState?.currentTurnUserId || room.currentTurn,
+        players: room.players.map((p, idx) => ({ userId: p.userId, username: p.username, color: idx === 0 ? 'red' : 'blue' }))
+      });
+    } catch (e) {
+      console.error('Ludo snapshot error:', e);
+      socket.emit('error', { message: e.message || 'Snapshot failed' });
+    }
+  });
+
   // Chat Message
   socket.on('chatMessage', (data) => {
     const { roomId, message } = data;

@@ -284,6 +284,10 @@ class BaateinGame {
             if (!this.ludo) {
                 this.ludo = new window.LudoClient(this.socket, this.user, this.currentRoom);
                 this.ludo.mount(this.gameBoardContainer);
+                // request snapshot in case we mounted during an active game
+                if (this.currentRoom && this.currentRoom.roomId) {
+                    this.socket.emit('ludo:snapshot', { roomId: this.currentRoom.roomId });
+                }
             }
             this.currentRoom.status = 'active';
             this.currentRoom.currentTurn = data.currentTurn;
