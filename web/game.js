@@ -43,10 +43,14 @@ class BaateinGame {
         this.gameOverContent = document.querySelector('.game-over-content');
         this.playAgainBtn = document.getElementById('playAgainBtn');
         this.leaveRoomBtn = document.getElementById('leaveRoomBtn');
-        this.chatSection = document.getElementById('chatSection');
-        this.chatMessages = document.getElementById('chatMessages');
-        this.chatInput = document.getElementById('chatInput');
-        this.sendMessageBtn = document.getElementById('sendMessageBtn');
+        // Chat removed
+        this.chatSection = null;
+        this.chatMessages = null;
+        this.chatInput = null;
+        this.sendMessageBtn = null;
+        this.matchStats = document.getElementById('matchStats');
+        this.sessionStats = { wins: 0, losses: 0, draws: 0 };
+        this.seriesStats = {}; // keyed by opponent userId
         this.loadingOverlay = document.getElementById('loadingOverlay');
         this.notifications = document.getElementById('notifications');
     }
@@ -63,10 +67,7 @@ class BaateinGame {
         this.leaveRoomBtn.addEventListener('click', () => this.leaveRoom());
         this.offerDrawBtn.addEventListener('click', () => this.offerDraw());
         this.resignBtn.addEventListener('click', () => this.resign());
-        this.sendMessageBtn.addEventListener('click', () => this.sendMessage());
-        this.chatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.sendMessage();
-        });
+        // Chat removed: no listeners
         this.roomCodeInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.joinRoom();
         });
@@ -375,11 +376,7 @@ class BaateinGame {
             });
         });
         
-        this.socket.on('chatMessage', (data) => {
-            if (data && data.username && data.message) {
-                this.addChatMessage(data);
-            }
-        });
+        // Chat removed
         
         // Play Again events
         this.socket.on('playAgainRequested', (data) => {
@@ -561,7 +558,7 @@ class BaateinGame {
         
         // Show waiting room
         this.waitingRoom.style.display = 'block';
-        this.chatSection.style.display = 'block';
+        // Chat removed
         
         // Update room code if room exists
         if (this.currentRoom && this.currentRoom.roomId) {
@@ -607,6 +604,18 @@ class BaateinGame {
         });
         
         console.log('🔍 Players list updated:', playersToShow.map(p => ({ username: p.username, ready: p.ready })));
+
+        // Track current opponent when two players are present
+        if (this.currentRoom && this.currentRoom.players && this.currentRoom.players.length === 2) {
+            const opponent = this.currentRoom.players.find(p => p.userId !== this.user.userId);
+            if (opponent) {
+                this.currentOpponentId = opponent.userId;
+                this.currentOpponentName = opponent.username;
+                if (!this.seriesStats[this.currentOpponentId]) {
+                    this.seriesStats[this.currentOpponentId] = { wins: 0, losses: 0, draws: 0 };
+                }
+            }
+        }
     }
 
     checkIfCanStart() {
@@ -891,13 +900,15 @@ class BaateinGame {
             score = 'loss';
             this.gameOverContent.classList.add('lost');
             
-            // Add crying face animation for loss (reduced delay)
-            setTimeout(() => {
-                this.addCryingFace();
-            }, 300); // Faster: 500ms -> 300ms
+            // Simple crying emoji only (no extra tear animation)
         }
         
-        this.gameOverTitle.textContent = title;
+        // Add simple crying emoji before title for loss
+        if (score === 'loss') {
+            this.gameOverTitle.textContent = '😭 ' + title;
+        } else {
+            this.gameOverTitle.textContent = title;
+        }
         this.gameOverMessage.textContent = message;
         
         // Reset play again button state
@@ -905,6 +916,9 @@ class BaateinGame {
             this.playAgainBtn.disabled = false;
             this.playAgainBtn.innerHTML = '<i class="fas fa-redo"></i> Play Again';
         }
+        
+        // Update session stats and UI
+        this.updateMatchStats(score);
         
         // Send game over message to Flutter if available
         sendGameOverToFlutter(score);
@@ -948,37 +962,10 @@ class BaateinGame {
         this.waitingRoom.style.display = 'none';
         this.gameBoardContainer.style.display = 'none';
         this.gameOver.style.display = 'none';
-        this.chatSection.style.display = 'none';
+        // Chat removed
     }
 
-    sendMessage() {
-        const message = this.chatInput.value.trim();
-        
-        if (!message || !this.socket || !this.currentRoom) return;
-        
-        this.socket.emit('chatMessage', {
-            roomId: this.currentRoom.roomId,
-            message
-        });
-        
-        this.chatInput.value = '';
-    }
-
-    addChatMessage(data) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `chat-message ${data.userId === this.user.userId ? 'own' : 'other'}`;
-        
-        const timestamp = new Date(data.timestamp).toLocaleTimeString();
-        
-        messageDiv.innerHTML = `
-            <div class="username">${data.username}</div>
-            <div class="message">${data.message}</div>
-            <div class="timestamp">${timestamp}</div>
-        `;
-        
-        this.chatMessages.appendChild(messageDiv);
-        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-    }
+    // Chat removed
 
     handleLogout() {
         if (this.socket) {
@@ -1306,70 +1293,7 @@ class BaateinGame {
         }, 5000);
     }
     
-    // Add crying face animation for loss
-    addCryingFace() {
-        console.log('😢 Adding crying face');
-        
-        if (!this.gameOverContent) {
-            console.error('❌ No gameOverContent element found');
-            return;
-        }
-        
-        // Remove existing crying face
-        const existing = this.gameOverContent.querySelector('.crying-face-container');
-        if (existing) {
-            existing.remove();
-        }
-        
-        const container = document.createElement('div');
-        container.className = 'crying-face-container';
-        container.style.position = 'relative';
-        container.style.display = 'inline-block';
-        container.style.marginBottom = '1rem'; /* Add spacing below */
-        
-        const face = document.createElement('span');
-        face.className = 'crying-face';
-        face.textContent = '😢';
-        container.appendChild(face);
-        
-        // Add tears (reduced for performance)
-        for (let i = 0; i < 4; i++) { // Reduced from 6 to 4
-            const tear = document.createElement('div');
-            tear.className = 'tear';
-            tear.style.left = `${20 + i * 15}%`;
-            tear.style.top = '70%';
-            tear.style.animationDelay = `${i * 0.2}s`;
-            container.appendChild(tear);
-        }
-        
-        // Insert before title with proper spacing
-        if (this.gameOverTitle && this.gameOverTitle.parentNode) {
-            this.gameOverTitle.parentNode.insertBefore(container, this.gameOverTitle);
-            // Ensure title has margin-top to avoid overlap
-            this.gameOverTitle.style.marginTop = '1rem';
-        }
-        
-        // Keep tears falling (reduced frequency for performance)
-        const tearInterval = setInterval(() => {
-            // Add new tear periodically
-            const newTear = document.createElement('div');
-            newTear.className = 'tear';
-            newTear.style.left = `${30 + Math.random() * 40}%`;
-            newTear.style.top = '70%';
-            container.appendChild(newTear);
-            
-            setTimeout(() => {
-                if (newTear.parentNode) {
-                    newTear.remove();
-                }
-            }, 1200); // Faster: 1500ms -> 1200ms
-        }, 800); // Less frequent: 500ms -> 800ms
-        
-        // Stop tears when screen changes (shorter duration)
-        setTimeout(() => {
-            clearInterval(tearInterval);
-        }, 3000); // Reduced from 5000ms to 3000ms
-    }
+    // (removed) addCryingFace - using simple emoji only
     
     // Clear all animations - CRITICAL for preventing animation buildup
     clearAllAnimations() {
@@ -1417,6 +1341,44 @@ class BaateinGame {
         moveAnimatedCells.forEach(cell => cell.classList.remove('move-animation'));
         
         console.log('🧹 All animations cleared');
+    }
+
+    // Update and render session/series match stats
+    updateMatchStats(result) {
+        // result: 'win' | 'loss' | 'draw'
+        if (!this.sessionStats) this.sessionStats = { wins: 0, losses: 0, draws: 0 };
+        if (result === 'win') this.sessionStats.wins++;
+        else if (result === 'loss') this.sessionStats.losses++;
+        else this.sessionStats.draws++;
+        
+        if (this.currentOpponentId) {
+            if (!this.seriesStats[this.currentOpponentId]) {
+                this.seriesStats[this.currentOpponentId] = { wins: 0, losses: 0, draws: 0 };
+            }
+            if (result === 'win') this.seriesStats[this.currentOpponentId].wins++;
+            else if (result === 'loss') this.seriesStats[this.currentOpponentId].losses++;
+            else this.seriesStats[this.currentOpponentId].draws++;
+        }
+        this.renderMatchStats();
+    }
+
+    renderMatchStats() {
+        if (!this.matchStats) return;
+        const s = this.sessionStats || { wins: 0, losses: 0, draws: 0 };
+        const series = this.currentOpponentId ? (this.seriesStats[this.currentOpponentId] || { wins: 0, losses: 0, draws: 0 }) : null;
+        
+        const oppLabel = this.currentOpponentName ? `vs ${this.currentOpponentName}` : 'Current Opponent';
+        const seriesHtml = series ? `
+            <div class="stats-row"><strong>${oppLabel}:</strong> ${series.wins}W - ${series.losses}L${series.draws ? ` - ${series.draws}D` : ''}</div>
+        ` : '';
+        
+        this.matchStats.innerHTML = `
+            <div class="stats-card">
+                <div class="stats-row"><strong>Session:</strong> ${s.wins}W - ${s.losses}L${s.draws ? ` - ${s.draws}D` : ''}</div>
+                ${seriesHtml}
+            </div>
+        `;
+        this.matchStats.style.display = 'block';
     }
 
     // Confetti rain across the screen
