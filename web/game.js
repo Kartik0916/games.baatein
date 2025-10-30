@@ -156,13 +156,20 @@ class BaateinGame {
             console.log('🔌 Connecting to WebSocket:', wsUrl);
             
             this.socket = io(wsUrl, {
-                transports: ['websocket', 'polling']
+                transports: ['websocket', 'polling'],
+                reconnection: true,
+                reconnectionAttempts: Infinity,
+                reconnectionDelay: 500,
+                reconnectionDelayMax: 5000
             });
             
             this.socket.on('connect', () => {
                 console.log('🔍 Connected to server');
                 this.socket.emit('authenticate', this.user);
-                this.setupSocketListeners();
+                if (!this._listenersSetup) {
+                    this.setupSocketListeners();
+                    this._listenersSetup = true;
+                }
                 this.startPingInterval();
                 resolve();
             });
@@ -172,9 +179,21 @@ class BaateinGame {
                 reject(error);
             });
             
-            this.socket.on('disconnect', () => {
-                console.log('Disconnected from server');
-                this.showNotification('Disconnected from server', 'warning');
+            this.socket.on('disconnect', (reason) => {
+                console.log('Disconnected from server:', reason);
+                this.showNotification('Disconnected from server. Reconnecting…', 'warning');
+            });
+            this.socket.on('reconnect_attempt', () => {
+                this.showNotification('Reconnecting…', 'info');
+            });
+            this.socket.on('reconnect', () => {
+                console.log('🔌 Reconnected');
+                if (this.user) this.socket.emit('authenticate', this.user);
+                // request snapshot if we were in a Ludo room
+                if (this.currentRoom && this.currentRoom.game === 'ludo') {
+                    this.socket.emit('ludo:snapshot', { roomId: this.currentRoom.roomId });
+                }
+                this.showNotification('Reconnected', 'success');
             });
             
             this.socket.on('pong', () => {

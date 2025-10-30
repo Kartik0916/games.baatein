@@ -24,7 +24,8 @@ const io = socketIo(server, {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
       
-      if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+      const allowVercelPreview = /\.vercel\.app$/i.test(origin || '');
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes("*") || allowVercelPreview) {
         callback(null, true);
       } else {
         console.log(`🚫 CORS blocked origin: ${origin}`);
@@ -44,7 +45,8 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+    const allowVercelPreview = /\.vercel\.app$/i.test(origin || '');
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes("*") || allowVercelPreview) {
       callback(null, true);
     } else {
       console.log(`🚫 Express CORS blocked origin: ${origin}`);
