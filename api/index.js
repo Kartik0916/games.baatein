@@ -135,7 +135,7 @@ io.on('connection', (socket) => {
   // Create Room
   socket.on('createRoom', (data) => {
     try {
-      const { userId, username, avatar, game } = data;
+      const { userId, username, avatar } = data;
       
       if (!userId || !username) {
         socket.emit('error', { message: 'User ID and username are required' });
@@ -155,7 +155,7 @@ io.on('connection', (socket) => {
           symbol: 'X'
         }],
         status: 'waiting',
-        game: game === 'ludo' ? 'ludo' : 'tic-tac-toe',
+        game: 'tic-tac-toe',
         gameState: initializeGame(),
         currentTurn: null,
         createdAt: new Date()
@@ -343,90 +343,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Ludo: roll dice
-  socket.on('ludo:rollDice', (data) => {
-    try {
-      const { roomId } = data;
-      const room = activeRooms.get(roomId);
-      if (!room || room.game !== 'ludo') return;
-      const player = room.players.find(p => p.socketId === socket.id);
-      if (!player) throw new Error('Player not found');
-      // Prevent rolling twice before moving
-      if (room.gameState.awaitingMoveForUserId) {
-        throw new Error('Please complete your move before rolling again');
-      }
-      const engine = require('./ludo/engine');
+  // Ludo removed
 
-      const result = engine.rollDice(room.gameState, { userId: player.userId });
-      room.gameState = result.state;
-      const movable = engine.getMovableTokens(room.gameState, { userId: player.userId }, result.value);
-      io.to(roomId).emit('ludo:diceRolled', {
-        userId: player.userId,
-        value: result.value,
-        movableTokens: movable
-      });
-      // If no moves and die is not 6, auto-pass turn
-      if ((!movable || movable.length === 0) && result.value !== 6) {
-        // clear awaiting move
-        room.gameState.awaitingMoveForUserId = null;
-        // pass turn
-        const idx = room.players.findIndex(p => p.userId === room.gameState.currentTurnUserId);
-        const nextIdx = (idx + 1) % room.players.length;
-        room.gameState.currentTurnUserId = room.players[nextIdx].userId;
-        io.to(roomId).emit('ludo:turnChanged', { nextUserId: room.gameState.currentTurnUserId });
-      }
-    } catch (e) {
-      console.error('Ludo rollDice error:', e);
-      socket.emit('error', { message: e.message || 'Ludo roll failed' });
-    }
-  });
-
-  // Ludo: move token
-  socket.on('ludo:moveToken', (data) => {
-    try {
-      const { roomId, tokenId, die } = data;
-      const room = activeRooms.get(roomId);
-      if (!room || room.game !== 'ludo') return;
-      const player = room.players.find(p => p.socketId === socket.id);
-      if (!player) throw new Error('Player not found');
-      const engine = require('./ludo/engine');
-      const res = engine.applyMove(room.gameState, { userId: player.userId }, tokenId, die);
-      room.gameState = res.state;
-      io.to(roomId).emit('ludo:tokenMoved', {
-        userId: player.userId,
-        tokenId,
-        from: res.from,
-        to: res.to,
-        captured: res.captured || null,
-        state: room.gameState
-      });
-      if (room.gameState.winner) {
-        endGame(room, { winner: room.gameState.winner, reason: 'ludo_win' });
-      } else {
-        io.to(roomId).emit('ludo:turnChanged', { nextUserId: room.gameState.currentTurnUserId });
-      }
-    } catch (e) {
-      console.error('Ludo moveToken error:', e);
-      socket.emit('error', { message: e.message || 'Move failed' });
-    }
-  });
-
-  // Ludo: snapshot state for late join/reconnect
-  socket.on('ludo:snapshot', (data) => {
-    try {
-      const { roomId } = data || {};
-      const room = activeRooms.get(roomId);
-      if (!room || room.game !== 'ludo') return;
-      io.to(socket.id).emit('ludo:state', {
-        state: room.gameState,
-        currentTurn: room.gameState?.currentTurnUserId || room.currentTurn,
-        players: room.players.map((p, idx) => ({ userId: p.userId, username: p.username, color: idx === 0 ? 'red' : 'blue' }))
-      });
-    } catch (e) {
-      console.error('Ludo snapshot error:', e);
-      socket.emit('error', { message: e.message || 'Snapshot failed' });
-    }
-  });
+  // Ludo removed
 
   // Chat Message
   socket.on('chatMessage', (data) => {
@@ -889,25 +808,7 @@ function startGame(room) {
   room.winner = null;
   room.endTime = null;
 
-  if ((room.game || 'tic-tac-toe') === 'ludo') {
-    // Initialize Ludo state
-    const { initializeLudoState } = require('./ludo/engine');
-    const ludoPlayers = room.players.map((p, idx) => ({
-      userId: p.userId,
-      username: p.username,
-      color: idx === 0 ? 'red' : 'blue'
-    }));
-    room.gameState = initializeLudoState(ludoPlayers);
-    room.currentTurn = room.gameState.currentTurnUserId;
-
-    io.to(room.roomId).emit('ludo:started', {
-      state: room.gameState,
-      currentTurn: room.currentTurn,
-      players: room.players.map((p, idx) => ({ userId: p.userId, username: p.username, color: idx === 0 ? 'red' : 'blue' }))
-    });
-    console.log(`🎲 Ludo started in room ${room.roomId}`);
-    return;
-  }
+  // Ludo removed
 
   // Tic Tac Toe default
   room.gameState = initializeGame();

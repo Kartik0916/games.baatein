@@ -24,7 +24,7 @@ class BaateinGame {
         this.logoutBtn = document.getElementById('logoutBtn');
         this.createRoomBtn = document.getElementById('createRoomBtn');
         this.selectTicTacToeBtn = document.getElementById('selectTicTacToe');
-        this.selectLudoBtn = document.getElementById('selectLudo');
+        this.selectLudoBtn = null;
         this.joinRoomBtn = document.getElementById('joinRoomBtn');
         this.roomInput = document.getElementById('roomInput');
         this.roomCodeInput = document.getElementById('roomCodeInput');
@@ -57,19 +57,17 @@ class BaateinGame {
         this.seriesStats = {}; // keyed by opponent userId
         this.loadingOverlay = document.getElementById('loadingOverlay');
         this.notifications = document.getElementById('notifications');
-        this.selectedGame = null;
+        this.selectedGame = 'tic-tac-toe';
     }
 
     setupEventListeners() {
         this.loginForm.addEventListener('submit', (e) => this.handleLogin(e));
         this.logoutBtn.addEventListener('click', () => this.handleLogout());
-        this.createRoomBtn.addEventListener('click', () => this.createRoom(this.selectedGame || 'tic-tac-toe'));
+        this.createRoomBtn.addEventListener('click', () => this.createRoom('tic-tac-toe'));
         if (this.selectTicTacToeBtn) {
             this.selectTicTacToeBtn.addEventListener('click', () => this.selectGame('tic-tac-toe'));
         }
-        if (this.selectLudoBtn) {
-            this.selectLudoBtn.addEventListener('click', () => this.selectGame('ludo'));
-        }
+        // Ludo removed
         this.joinRoomBtn.addEventListener('click', () => this.showJoinRoomInput());
         this.joinWithCodeBtn.addEventListener('click', () => this.joinRoom());
         this.cancelJoinBtn.addEventListener('click', () => this.hideJoinRoomInput());
@@ -107,19 +105,13 @@ class BaateinGame {
     }
 
     selectGame(game) {
-        this.selectedGame = game;
-        // Update the subsequent screen to reflect selection and go to room screen
+        // Always go to Tic Tac Toe
+        this.selectedGame = 'tic-tac-toe';
         this.showGameScreen();
-        // Update waiting room header label
         const gameNameEl = document.getElementById('gameName');
-        if (gameNameEl) gameNameEl.textContent = game === 'ludo' ? 'Ludo' : 'Tic Tac Toe';
-        // Update create room button label/icon
+        if (gameNameEl) gameNameEl.textContent = 'Tic Tac Toe';
         if (this.createRoomBtn) {
-            if (game === 'ludo') {
-                this.createRoomBtn.innerHTML = '<i class="fas fa-dice-six"></i> Create Ludo Room';
-            } else {
-                this.createRoomBtn.innerHTML = '<i class="fas fa-plus"></i> Create Room';
-            }
+            this.createRoomBtn.innerHTML = '<i class="fas fa-plus"></i> Create Room';
         }
     }
 
@@ -189,10 +181,7 @@ class BaateinGame {
             this.socket.on('reconnect', () => {
                 console.log('🔌 Reconnected');
                 if (this.user) this.socket.emit('authenticate', this.user);
-                // request snapshot if we were in a Ludo room
-                if (this.currentRoom && this.currentRoom.game === 'ludo') {
-                    this.socket.emit('ludo:snapshot', { roomId: this.currentRoom.roomId });
-                }
+                // Ludo removed
                 this.showNotification('Reconnected', 'success');
             });
             
@@ -295,27 +284,7 @@ class BaateinGame {
             }
         });
 
-        // Ludo start: create client, mount, and render immediately
-        this.socket.on('ludo:started', (data) => {
-            // Switch UI to game board
-            if (this.waitingRoom) this.waitingRoom.style.display = 'none';
-            if (this.gameBoardContainer) this.gameBoardContainer.style.display = 'block';
-            if (!this.ludo) {
-                this.ludo = new window.LudoClient(this.socket, this.user, this.currentRoom);
-                this.ludo.mount(this.gameBoardContainer);
-                // request snapshot in case we mounted during an active game
-                if (this.currentRoom && this.currentRoom.roomId) {
-                    this.socket.emit('ludo:snapshot', { roomId: this.currentRoom.roomId });
-                }
-            }
-            this.currentRoom.status = 'active';
-            this.currentRoom.currentTurn = data.currentTurn;
-            this.ludo.state = data.state;
-            this.ludo.room = this.currentRoom;
-            this.ludo.render();
-        });
-
-        // Ludo events are handled in LudoClient (instantiated on ludo:started)
+        // Ludo removed
         
         this.socket.on('moveMade', (data) => {
             if (data.gameState && data.gameState.board) {
@@ -560,7 +529,7 @@ class BaateinGame {
             userId: this.user.userId,
             username: this.user.username,
             avatar: this.user.avatar,
-            game
+            game: 'tic-tac-toe'
         });
     }
 
@@ -642,8 +611,7 @@ class BaateinGame {
         // Update game name dynamically
         const gameNameEl = document.getElementById('gameName');
         if (gameNameEl) {
-            const g = (this.currentRoom && this.currentRoom.game) ? this.currentRoom.game : 'tic-tac-toe';
-            gameNameEl.textContent = g === 'ludo' ? 'Ludo' : 'Tic Tac Toe';
+            gameNameEl.textContent = 'Tic Tac Toe';
         }
         // Chat removed
         
