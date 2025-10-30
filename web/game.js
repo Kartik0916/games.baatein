@@ -1368,32 +1368,25 @@ class BaateinGame {
     }
 
     renderMatchStats() {
-        if (!this.matchStats) return;
-        const s = this.sessionStats || { wins: 0, losses: 0, draws: 0 };
-        const series = this.currentOpponentId ? (this.seriesStats[this.currentOpponentId] || { wins: 0, losses: 0, draws: 0 }) : null;
+        // Only head-to-head; hide if no opponent yet
+        const hasOpponent = Boolean(this.currentOpponentId);
+        if (!hasOpponent) {
+            if (this.matchStats) this.matchStats.style.display = 'none';
+            if (this.matchStatsBar) this.matchStatsBar.style.display = 'none';
+            return;
+        }
 
+        const series = this.seriesStats[this.currentOpponentId] || { wins: 0, losses: 0, draws: 0 };
         const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-        const oppLabel = this.currentOpponentName ? `vs ${this.currentOpponentName}` : 'Current opponent';
+        const oppName = this.currentOpponentName || 'opponent';
 
-        const sessionLine = `
-            <div class="stats-row">
-                <span class="stats-label">Session</span>
-                <span class="stats-value">${plural(s.wins, 'win')} — ${plural(s.losses, 'loss')}${s.draws ? ` — ${plural(s.draws, 'draw')}` : ''}</span>
-            </div>`;
-
-        const seriesLine = series ? `
-            <div class="stats-row">
-                <span class="stats-label">${oppLabel}</span>
-                <span class="stats-value">${plural(series.wins, 'win')} — ${plural(series.losses, 'loss')}${series.draws ? ` — ${plural(series.draws, 'draw')}` : ''}</span>
-            </div>` : '';
+        const line = `
+            <div class=\"stats-row\">\n                <span class=\"stats-label\">You vs ${oppName}</span>\n                <span class=\"stats-value\">${plural(series.wins, 'win')} — ${plural(series.losses, 'loss')}${series.draws ? ` — ${plural(series.draws, 'draw')}` : ''}</span>\n            </div>`;
 
         const html = `
-            <div class="stats-card">
-                ${sessionLine}
-                ${seriesLine}
-            </div>
+            <div class=\"stats-card\">\n                ${line}\n            </div>
         `;
-        // Update both locations
+
         if (this.matchStats) {
             this.matchStats.innerHTML = html;
             this.matchStats.style.display = 'block';
