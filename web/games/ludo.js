@@ -27,13 +27,14 @@ class LudoClient {
         // Board
         this.boardEl = document.createElement('div');
         this.boardEl.className = 'ludo-board';
-        // SVG backdrop that mimics provided board
+        // SVG backdrop that matches 4-color Ludo board
         this.backdrop = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         this.backdrop.setAttribute('viewBox', '0 0 150 150');
         this.backdrop.classList.add('ludo-backdrop');
         this.boardEl.appendChild(this.backdrop);
         this.drawBoardBackground();
         this.drawBoardTiles();
+        this.drawCenterOverlay();
         // Dice
         const yourDice = document.createElement('div');
         yourDice.className = 'dice-slot you';
@@ -42,9 +43,9 @@ class LudoClient {
         yourLabel.textContent = 'You';
         this.diceEl = document.createElement('div');
         this.diceEl.className = 'die';
-        this.diceEl.textContent = '-';
+        this.buildDiePips(this.diceEl);
         this.rollBtn = document.createElement('button');
-        this.rollBtn.className = 'btn btn-primary';
+        this.rollBtn.className = 'btn btn-primary roll-btn';
         this.rollBtn.textContent = 'Roll';
         this.rollBtn.addEventListener('click', () => this.roll());
         yourDice.appendChild(yourLabel);
@@ -58,7 +59,7 @@ class LudoClient {
         oppLabel.textContent = 'Opponent';
         const oppDie = document.createElement('div');
         oppDie.className = 'die';
-        oppDie.textContent = '-';
+        this.buildDiePips(oppDie);
         oppDice.appendChild(oppLabel);
         oppDice.appendChild(oppDie);
 
@@ -95,12 +96,18 @@ class LudoClient {
         // Clear tokens
         this.boardEl.querySelectorAll('.token').forEach(t => t.remove());
         const place = (idx) => this.coords.track[idx] || { left: '50%', top: '50%' };
-        const addToken = (color, label, style) => {
+        const addToken = (color, style) => {
             const el = document.createElement('div');
             el.className = `token ${color}`;
-            el.textContent = label;
             el.style.left = style.left;
             el.style.top = style.top;
+            // inner skin: ring + disc to mimic repo
+            const ring = document.createElement('div');
+            ring.className = 'tk-ring';
+            const disc = document.createElement('div');
+            disc.className = 'tk-disc';
+            ring.appendChild(disc);
+            el.appendChild(ring);
             this.boardEl.appendChild(el);
             return el;
         };
@@ -112,7 +119,7 @@ class LudoClient {
                 else if (t.posType === 'home') pos = (pl.color === 'red') ? this.coords.home.red[i] : this.coords.home.blue[i];
                 else if (t.posType === 'lane') pos = (pl.color === 'red') ? this.coords.lane.red[t.index] : this.coords.lane.blue[t.index];
                 else pos = (pl.color === 'red') ? this.coords.goal.red : this.coords.goal.blue;
-                const el = addToken(pl.color, i + 1, pos);
+                const el = addToken(pl.color, pos);
                 // crude stacking offset
                 const sameTileCount = Array.from(this.boardEl.querySelectorAll('.token')).filter(x => x.style.left===el.style.left && x.style.top===el.style.top).length;
                 if (sameTileCount === 2) el.classList.add('stack1');
@@ -127,7 +134,7 @@ class LudoClient {
         });
 
         // Dice UI state
-        this.diceEl.textContent = this.currentDie || '-';
+        this.setDieValue(this.diceEl, this.currentDie || 0);
         const myTurn = this.state.currentTurnUserId === this.user.userId;
         this.rollBtn.disabled = !myTurn;
         this.turnBannerEl.textContent = myTurn ? 'Your turn' : `${this.getUsername(this.state.currentTurnUserId)}'s turn`;
@@ -200,8 +207,9 @@ class LudoClient {
             blue: [cell(7,13),cell(7,12),cell(7,11),cell(7,10),cell(7,9),cell(7,8)]
         };
         const home = {
-            red: [ cell(1.5,1.5), cell(3.5,1.5), cell(1.5,3.5), cell(3.5,3.5) ],
-            blue:[ cell(11.5,11.5), cell(13.5,11.5), cell(11.5,13.5), cell(13.5,13.5) ]
+            red: [ cell(1.6,1.6), cell(3.4,1.6), cell(1.6,3.4), cell(3.4,3.4) ],
+            // Pull blue tokens slightly inward so they sit well within the home box
+            blue:[ cell(11.6,11.6), cell(13.4,11.6), cell(11.6,13.4), cell(13.4,13.4) ]
         };
         const goal = { red: cell(7,7), blue: cell(7,7) };
         return { track, lane, home, goal };
@@ -217,9 +225,11 @@ class LudoClient {
         const cellC = (x,y)=>({ cx: x*cellSize + cellSize/2, cy: y*cellSize + cellSize/2 });
         const star=(x,y,color='#f5c518')=>{ const {cx,cy}=cellC(x,y); const r=3; const p=document.createElementNS('http://www.w3.org/2000/svg','path'); p.setAttribute('fill', color); p.setAttribute('d', `M ${cx} ${cy-r} L ${cx+r*0.588} ${cy+r*0.809} L ${cx-r} ${cy- r*0.309} L ${cx+r} ${cy- r*0.309} L ${cx-r*0.588} ${cy+r*0.809} Z`); return p; };
         const arrow=(x,y,dir,fill='#27ae60')=>{ const {cx,cy}=cellC(x,y); const d=4; let pts=''; if(dir==='down'){ pts=`${cx-d},${cy-d} ${cx+d},${cy-d} ${cx},${cy+d}`;} else if(dir==='up'){ pts=`${cx-d},${cy+d} ${cx+d},${cy+d} ${cx},${cy-d}`;} else if(dir==='left'){ pts=`${cx+d},${cy-d} ${cx+d},${cy+d} ${cx-d},${cy}`;} else { pts=`${cx-d},${cy-d} ${cx-d},${cy+d} ${cx+d},${cy}`;} const p=document.createElementNS('http://www.w3.org/2000/svg','polygon'); p.setAttribute('points', pts); p.setAttribute('fill', fill); return p; };
-        // Homes
-        add(rect(10,10,40,40,'#ffccd2','#f5c2c7')); // red home
-        add(rect(100,100,40,40,'#cfe0ff','#cfe2ff')); // blue home
+        // 4 colored homes (visuals only; gameplay stays 2-player)
+        add(rect(10,10,40,40,'#ffccd2','#f5c2c7')); // red
+        add(rect(100,10,40,40,'#fff3bf','#ffe8a1')); // yellow
+        add(rect(10,100,40,40,'#d1f7c4','#b2f2bb')); // green
+        add(rect(100,100,40,40,'#cfe0ff','#cfe2ff')); // blue
         // Center triangles
         add(poly('65,65 85,65 75,75','#2ecc71'));
         add(poly('85,65 85,85 75,75','#f1c40f'));
@@ -240,6 +250,21 @@ class LudoClient {
         add(arrow(14,7,'left','#f1c40f'));
         add(arrow(7,14,'up','#3498db'));
         add(arrow(0,7,'right','#e74c3c'));
+    }
+
+    drawCenterOverlay(){
+        // Draw opaque center triangles above tiles so no path shows behind
+        const existing = this.boardEl.querySelector('.center-overlay');
+        if (existing) existing.remove();
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox','0 0 150 150');
+        svg.classList.add('center-overlay');
+        const poly=(points,fill)=>{const p=document.createElementNS('http://www.w3.org/2000/svg','polygon');p.setAttribute('points',points); p.setAttribute('fill',fill); return p;};
+        svg.appendChild(poly('65,65 85,65 75,75','#2ecc71'));
+        svg.appendChild(poly('85,65 85,85 75,75','#f1c40f'));
+        svg.appendChild(poly('65,65 65,85 75,75','#e74c3c'));
+        svg.appendChild(poly('65,85 85,85 75,75','#3498db'));
+        this.boardEl.appendChild(svg);
     }
 
     moveToken(tokenId) {
@@ -271,6 +296,13 @@ class LudoClient {
         this.socket.on('ludo:diceRolled', (data) => {
             this.currentDie = data.value;
             this.movable = data.movableTokens || [];
+            // roll animation on your die
+            if (this.diceEl) {
+                this.diceEl.classList.remove('rolling');
+                // force reflow
+                void this.diceEl.offsetWidth;
+                this.diceEl.classList.add('rolling');
+            }
             if (this.movable.length === 0 && this.state && this.state.currentTurnUserId === this.user.userId) {
                 // show a brief hint near dice
                 this.turnBannerEl.textContent = 'No moves available';
@@ -304,6 +336,30 @@ class LudoClient {
             }
             this.render();
         });
+    }
+
+    buildDiePips(el){
+        el.innerHTML = '';
+        for(let i=0;i<7;i++){
+            const p = document.createElement('span');
+            p.className = 'pip';
+            el.appendChild(p);
+        }
+        this.setDieValue(el,0);
+    }
+
+    setDieValue(el,val){
+        const pips = el.querySelectorAll('.pip');
+        pips.forEach(p=>p.style.opacity='0');
+        const idx = {
+            1:[3],
+            2:[0,6],
+            3:[0,3,6],
+            4:[0,2,4,6],
+            5:[0,2,3,4,6],
+            6:[0,1,2,4,5,6]
+        }[val] || [];
+        idx.forEach(i=>{ if(pips[i]) pips[i].style.opacity='1'; });
     }
 
     getUsername(userId) {
