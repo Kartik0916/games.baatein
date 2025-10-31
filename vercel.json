@@ -1,16 +1,13 @@
 {
   "version": 2,
   "builds": [
-    {
-      "src": "api/index.js",
-      "use": "@vercel/node"
-    }
+    { "src": "api/index.js", "use": "@vercel/node" },
+    { "src": "assets/web/**", "use": "@vercel/static" }
   ],
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "api/index.js"
-    }
+    { "src": "/games/(.*)", "dest": "assets/web/games/$1" },
+    { "src": "/(index\\.html)?", "dest": "assets/web/index.html" },
+    { "src": "/api/(.*)", "dest": "api/index.js" }
   ],
   "env": {
     "NODE_ENV": "production"
