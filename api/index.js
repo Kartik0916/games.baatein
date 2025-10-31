@@ -19,24 +19,14 @@ const allowedOrigins = [
 ];
 
 const io = socketIo(server, {
+  path: '/socket.io',
+  transports: ['websocket', 'polling'],
   cors: {
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-      
-      const allowVercelPreview = /\.vercel\.app$/i.test(origin || '');
-      if (allowedOrigins.includes(origin) || allowedOrigins.includes("*") || allowVercelPreview) {
-        callback(null, true);
-      } else {
-        console.log(`🚫 CORS blocked origin: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
+    origin: '*',
     methods: ["GET", "POST"],
-    credentials: true,
-    allowedHeaders: ["*"]
-  },
-  transports: ['websocket', 'polling']
+    allowedHeaders: ["*"],
+    credentials: false
+  }
 });
 
 // Middleware

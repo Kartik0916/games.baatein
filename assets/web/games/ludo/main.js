@@ -43,7 +43,6 @@ function connect(){
   if (socket && socket.connected) return;
   ensureUser();
   socket = io(WS_URL, {
-    // Prefer polling first; upgrade to websocket if allowed
     transports: ['polling', 'websocket'],
     upgrade: true,
     path: '/socket.io',
