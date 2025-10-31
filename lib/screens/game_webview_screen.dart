@@ -56,36 +56,17 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
 
   Future<void> _loadGame() async {
     try {
-      final String htmlContent = await rootBundle.loadString('assets/game/index.html');
-      
-      // Inject WebSocket URL configuration
-      final String wsUrl = const String.fromEnvironment(
-        'WEBSOCKET_URL',
-        defaultValue: 'https://games-baatein-backend.onrender.com',
-      );
-      
-      // Inject the WebSocket URL into the HTML
-      final String modifiedHtml = htmlContent.replaceFirst(
-        '<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>',
-        '''
-        <script>
-          // Set WebSocket URL from Flutter environment
-          window.WEBSOCKET_URL = '$wsUrl';
-          console.log('🌐 WebSocket URL set to:', window.WEBSOCKET_URL);
-        </script>
-        <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
-        ''',
-      );
+      final String htmlContent = await rootBundle.loadString('assets/web/game_selection.html');
       
       await _controller.loadHtmlString(
-        modifiedHtml,
-        baseUrl: 'asset:///assets/game/',
+        htmlContent,
+        baseUrl: 'asset:///assets/web/',
       );
     } catch (e) {
-      debugPrint('Error loading game: $e');
+      debugPrint('Error loading game selection: $e');
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Error loading game: $e';
+        _errorMessage = 'Error loading game selection: $e';
       });
     }
   }
@@ -114,7 +95,7 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tic Tac Toe - 2 Player'),
+        title: const Text('Baatein Games'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
