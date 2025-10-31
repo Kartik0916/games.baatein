@@ -42,7 +42,17 @@ function ensureUser(){
 function connect(){
   if (socket && socket.connected) return;
   ensureUser();
-  socket = io(WS_URL, { transports: ['websocket','polling'] });
+  socket = io(WS_URL, {
+    // Force HTTP long-polling to avoid strict websocket proxies on some hosts
+    transports: ['polling'],
+    upgrade: false,
+    path: '/socket.io/',
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 5000,
+    withCredentials: false
+  });
 
   socket.on('connect', () => {
     socket.emit('authenticate', user);
@@ -51,7 +61,13 @@ function connect(){
   });
 
   socket.on('connect_error', (err) => {
-    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = `Connection error: ${err?.message||err}`; }
+    // Show only if not connected/connecting
+    if (!socket.connected) {
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.textContent = `Connection error: ${err?.message||err}`;
+      }
+    }
   });
 
   // Lobby events
