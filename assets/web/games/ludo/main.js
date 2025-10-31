@@ -43,10 +43,10 @@ function connect(){
   if (socket && socket.connected) return;
   ensureUser();
   socket = io(WS_URL, {
-    // Force HTTP long-polling to avoid strict websocket proxies on some hosts
-    transports: ['polling'],
-    upgrade: false,
-    path: '/socket.io/',
+    // Prefer polling first; upgrade to websocket if allowed
+    transports: ['polling', 'websocket'],
+    upgrade: true,
+    path: '/socket.io',
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 500,
