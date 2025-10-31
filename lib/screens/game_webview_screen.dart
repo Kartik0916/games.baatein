@@ -56,7 +56,7 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
 
   Future<void> _loadGame() async {
     try {
-      final String htmlContent = await rootBundle.loadString('assets/web/game_selection.html');
+      final String htmlContent = await rootBundle.loadString('assets/web/index.html');
       
       await _controller.loadHtmlString(
         htmlContent,

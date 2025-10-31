@@ -93,6 +93,38 @@ app.get('/health', (req, res) => {
 // Game Storage
 const activeRooms = new Map();
 const userSockets = new Map();
+// Ludo server-authoritative state
+const activeLudoGames = new Map(); // roomId -> state
+
+function createInitialLudoState(roomId) {
+  return {
+    roomId,
+    status: 'waiting',
+    players: {}, // color -> { userId, username, socketId }
+    colors: {}, // userId -> 'P1' | 'P2'
+    positions: { P1: [0,0,0,0], P2: [26,26,26,26] }, // base positions
+    diceValue: null,
+    turn: 'P1',
+  };
+}
+
+// Simplified Ludo helpers (circular 0..51 path)
+const SAFE_POSITIONS = []; // can be populated with board safe indices if needed
+function getNextLudoPosition(color, current, moveBy) {
+  if (typeof current !== 'number' || typeof moveBy !== 'number') return null;
+  if (moveBy <= 0) return null;
+  const next = (current + moveBy) % 52;
+  return next;
+}
+function sanitizeLudoState(state) {
+  return {
+    roomId: state.roomId,
+    status: state.status,
+    positions: { P1: [...state.positions.P1], P2: [...state.positions.P2] },
+    diceValue: state.diceValue,
+    turn: state.turn,
+  };
+}
 
 // Initialize Game
 function initializeGame() {
@@ -344,29 +376,92 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Ludo realtime events
-  socket.on('ludoRoll', (data) => {
+  // Ludo: lobby and gameplay (server-authoritative)
+  socket.on('ludoCreateRoom', (data) => {
     try {
-      const { roomId, value } = data || {};
-      if (!roomId || typeof value !== 'number') return;
-      const room = activeRooms.get(roomId);
-      if (!room || room.game !== 'ludo') return;
-      io.to(roomId).emit('ludoRoll', { fromUserId: socket.userId, value });
+      const state = createInitialLudoState('ludo_' + Math.random().toString(36).substr(2, 6));
+      const user = { userId: data?.userId, username: data?.username, socketId: socket.id };
+      state.players.P1 = user;
+      state.colors[user.userId] = 'P1';
+      activeLudoGames.set(state.roomId, state);
+      socket.join(state.roomId);
+      socket.roomId = state.roomId;
+      socket.emit('ludoRoomCreated', { roomId: state.roomId });
     } catch (e) {
-      console.error('❌ ludoRoll error:', e);
+      console.error('❌ ludoCreateRoom error:', e);
     }
   });
 
-  socket.on('ludoMove', (data) => {
+  socket.on('ludoJoinRoom', (data) => {
     try {
-      const { roomId, player, piece, dice } = data || {};
-      if (!roomId) return;
-      const room = activeRooms.get(roomId);
-      if (!room || room.game !== 'ludo') return;
-      io.to(roomId).emit('ludoMove', { fromUserId: socket.userId, player, piece, dice });
-    } catch (e) {
-      console.error('❌ ludoMove error:', e);
-    }
+      const { roomId, userId, username } = data || {};
+      const state = activeLudoGames.get(roomId);
+      if (!state) { socket.emit('error', { message: 'Room not found' }); return; }
+      if (state.players.P2) { socket.emit('error', { message: 'Room full' }); return; }
+      const user = { userId, username, socketId: socket.id };
+      state.players.P2 = user;
+      state.colors[userId] = 'P2';
+      socket.join(roomId);
+      socket.roomId = roomId;
+      io.to(roomId).emit('ludoRoomJoined', { roomId });
+    } catch (e) { console.error('❌ ludoJoinRoom error:', e); }
+  });
+
+  socket.on('ludoPlayerReady', (data) => {
+    try {
+      const { roomId } = data || {};
+      const state = activeLudoGames.get(roomId);
+      if (!state) return;
+      state.ready = state.ready || new Set();
+      state.ready.add(socket.userId);
+      if (state.ready.size >= 2) {
+        state.status = 'active';
+        io.to(roomId).emit('ludoGameStart', sanitizeLudoState(state));
+      }
+    } catch (e) { console.error('❌ ludoPlayerReady error:', e); }
+  });
+
+  socket.on('ludoRollDice', (data) => {
+    try {
+      const { roomId } = data || {};
+      const state = activeLudoGames.get(roomId);
+      if (!state || state.status !== 'active') return;
+      const color = state.colors[socket.userId];
+      if (color !== state.turn) return; // not your turn
+      const roll = 1 + Math.floor(Math.random() * 6);
+      state.diceValue = roll;
+      io.to(roomId).emit('ludoGameState', sanitizeLudoState(state));
+    } catch (e) { console.error('❌ ludoRollDice error:', e); }
+  });
+
+  socket.on('ludoMovePiece', (data) => {
+    try {
+      const { roomId, player, piece } = data || {};
+      const state = activeLudoGames.get(roomId);
+      if (!state || state.status !== 'active') return;
+      const color = state.colors[socket.userId];
+      if (color !== state.turn) return;
+      const pIndex = Number(piece);
+      if (Number.isNaN(pIndex)) return;
+      const pos = state.positions[color][pIndex];
+      const roll = state.diceValue || 0;
+      if (roll <= 0) return;
+      const next = getNextLudoPosition(color, pos, roll);
+      if (next === null) return; // invalid
+      state.positions[color][pIndex] = next;
+      // very basic kill check (same cell, not base indices list)
+      const other = color === 'P1' ? 'P2' : 'P1';
+      for (let i = 0; i < 4; i++) {
+        if (state.positions[other][i] === next && !SAFE_POSITIONS.includes(next)) {
+          // send back to base
+          state.positions[other][i] = other === 'P1' ? 0 : 26;
+        }
+      }
+      // switch turn unless rolled 6
+      if (roll !== 6) state.turn = state.turn === 'P1' ? 'P2' : 'P1';
+      state.diceValue = null;
+      io.to(roomId).emit('ludoGameState', sanitizeLudoState(state));
+    } catch (e) { console.error('❌ ludoMovePiece error:', e); }
   });
 
   // Chat Message

@@ -2,13 +2,30 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LudoJS Tutorial</title>
     <link rel="stylesheet" href="./ludo/style.css">
+    <style>
+      .lobby{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;justify-content:center;margin:12px auto;padding:8px 10px}
+      .lobby .input{padding:.55rem .75rem;border:1px solid #e5e7eb;border-radius:8px}
+      .lobby .btn{padding:.6rem 1rem;border-radius:8px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-weight:600}
+      .lobby .btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none}
+      .waiting{display:none;text-align:center;color:#374151;font-weight:600;margin:6px 0 10px}
+    </style>
 </head>
 <body>
-    <div class="ludo-container">
+    <div class="lobby" id="lobby">
+      <a href="../../select.html" class="btn">Home</a>
+      <span>Room:</span>
+      <input id="roomCodeInput" class="input" placeholder="Enter room code" />
+      <button id="createRoomBtn" class="btn btn-primary">Create</button>
+      <button id="joinRoomBtn" class="btn">Join</button>
+      <button id="readyBtn" class="btn" disabled>Ready</button>
+      <span>Code: <b id="roomCode">-</b></span>
+      <span>You: <b id="youName"></b></span>
+    </div>
+    <div class="waiting" id="waitingMsg">Waiting for opponent… share the room code and press Ready.</div>
+    <div class="ludo-container" id="gameContainer" style="display:none;">
         <div class="ludo">
             <div class="player-pieces">
                 <div class="player-piece" player-id="P1" piece="0"></div>
@@ -37,6 +54,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
     <script src="./main.js" type="module"></script>
 </body>
 </html>

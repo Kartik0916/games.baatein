@@ -1522,6 +1522,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (storedName && storedAvatar && window.game) {
             const userId = 'user_' + Math.random().toString(36).substr(2, 9);
             window.game.user = { userId, username: storedName, avatar: storedAvatar };
+            // Force UI to game screen immediately (no internal welcome/selection)
+            try {
+                if (window.game.loginScreen) window.game.loginScreen.style.display = 'none';
+                if (window.game.gameSelection) window.game.gameSelection.style.display = 'none';
+                if (window.game.gameScreen) window.game.gameScreen.style.display = 'block';
+                if (window.game.userInfo) window.game.userInfo.style.display = 'flex';
+                const nameEl = document.getElementById('username');
+                if (nameEl) nameEl.textContent = storedName;
+            } catch(_) {}
             window.game.connectToServer().then(() => {
                 if (window.game.username) window.game.username.textContent = storedName;
                 if (typeof window.game.selectGame === 'function') {
