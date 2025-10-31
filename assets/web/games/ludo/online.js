@@ -1,4 +1,5 @@
 import { Ludo } from './ludo/Ludo.js';
+import { UI } from './ludo/UI.js';
 
 // Backend URL
 const WS_URL = window.WEBSOCKET_URL || 'https://games-baatein-backend.onrender.com';
@@ -9,6 +10,7 @@ let user = null;
 let roomId = null;
 let isReady = false;
 let isConnected = false;
+let isLive = false; // becomes true after gameStarted
 
 // Elements
 const statusEl = document.getElementById('status');
@@ -21,6 +23,8 @@ const btnReady = document.getElementById('readyBtn');
 
 // Create the game instance
 const ludo = new Ludo();
+// Disable gameplay until the game starts
+try { UI.disableDice(); } catch(e) { try { document.getElementById('dice-btn').disabled = true; } catch(_) {} }
 
 function setStatus(text){ statusEl.textContent = text; }
 
@@ -53,8 +57,10 @@ function connectSocket(){
     if (data?.room) {
       roomId = data.room.roomId;
       roomCodeEl.textContent = roomId;
-      setStatus('Room created. Share code with friend.');
+      setStatus('Room created. Share code and press Ready when both joined.');
       btnReady.disabled = false;
+      isLive = false;
+      try { UI.disableDice(); } catch(e) {}
     }
   });
   socket.on('playerJoined', (data) => {
@@ -65,6 +71,8 @@ function connectSocket(){
   });
   socket.on('gameStarted', () => {
     setStatus('Game started!');
+    isLive = true;
+    try { UI.enableDice(); } catch(e) { try { document.getElementById('dice-btn').disabled = false; } catch(_) {} }
   });
 
   // Ludo realtime: dice roll and moves
@@ -72,12 +80,15 @@ function connectSocket(){
     const { fromUserId, value } = payload || {};
     if (!value) return;
     // Apply remote dice
-    ludo.diceValue = value;
-    ludo.state = 1; // STATE.DICE_ROLLED
-    ludo.checkForEligiblePieces();
+    if (isLive) {
+      ludo.diceValue = value;
+      ludo.state = 1; // STATE.DICE_ROLLED
+      ludo.checkForEligiblePieces();
+    }
   });
   socket.on('ludoMove', (payload) => {
     const { player, piece, dice } = payload || {};
+    if (!isLive) return;
     if (dice) ludo.diceValue = dice;
     ludo.state = 1; // STATE.DICE_ROLLED
     ludo.handlePieceClick(player, piece);
@@ -108,6 +119,7 @@ btnReady.addEventListener('click', () => {
 // Patch dice click: after local dice is computed, broadcast value
 const _onDiceClick = ludo.onDiceClick.bind(ludo);
 ludo.onDiceClick = function(){
+  if (!isLive) { setStatus('Waiting for game start...'); return; }
   _onDiceClick();
   if (socket && roomId && ludo.diceValue) {
     socket.emit('ludoRoll', { roomId, value: ludo.diceValue });
@@ -117,6 +129,7 @@ ludo.onDiceClick = function(){
 // Patch piece click handler to broadcast chosen piece
 const _handlePieceClick = ludo.handlePieceClick.bind(ludo);
 ludo.handlePieceClick = function(player, piece){
+  if (!isLive) { setStatus('Waiting for game start...'); return; }
   if (socket && roomId) {
     socket.emit('ludoMove', { roomId, player, piece, dice: ludo.diceValue });
   }

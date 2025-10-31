@@ -1524,7 +1524,11 @@ document.addEventListener('DOMContentLoaded', () => {
             window.game.user = { userId, username: storedName, avatar: storedAvatar };
             window.game.connectToServer().then(() => {
                 if (window.game.username) window.game.username.textContent = storedName;
-                window.game.showGameSelection();
+                if (typeof window.game.selectGame === 'function') {
+                    window.game.selectGame('tic-tac-toe');
+                } else if (typeof window.game.showGameScreen === 'function') {
+                    window.game.showGameScreen();
+                }
                 window.game.showNotification(`Welcome, ${storedName}!`, 'success');
             }).catch(() => {/* ignore */});
         }
