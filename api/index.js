@@ -102,19 +102,45 @@ function createInitialLudoState(roomId) {
     status: 'waiting',
     players: {}, // color -> { userId, username, socketId }
     colors: {}, // userId -> 'P1' | 'P2'
-    positions: { P1: [0,0,0,0], P2: [26,26,26,26] }, // base positions
+    positions: { P1: [500,501,502,503], P2: [600,601,602,603] }, // base indices (match client)
     diceValue: null,
     turn: 'P1',
   };
 }
 
-// Simplified Ludo helpers (circular 0..51 path)
-const SAFE_POSITIONS = []; // can be populated with board safe indices if needed
+// Ludo helpers matching client constants
+const BASE_POSITIONS = { P1: [500,501,502,503], P2: [600,601,602,603] };
+const START_POSITIONS = { P1: 0, P2: 26 };
+const TURNING_POINTS = { P1: 50, P2: 24 };
+const HOME_START = { P1: 100, P2: 200 };
+const HOME_END = { P1: 105, P2: 205 };
+const SAFE_POSITIONS = [0,8,13,21,26,34,39,47];
+
+function isBase(color, pos) {
+  return BASE_POSITIONS[color] && BASE_POSITIONS[color].includes(pos);
+}
+
+function stepOnce(color, pos) {
+  if (pos === 51) return 0; // wrap
+  if (pos === TURNING_POINTS[color]) return HOME_START[color]; // enter home track
+  if (pos >= HOME_START[color] && pos < HOME_END[color]) return pos + 1; // progress home
+  if (pos === HOME_END[color]) return pos; // already finished slot
+  return (pos + 1) % 52; // main track
+}
+
 function getNextLudoPosition(color, current, moveBy) {
   if (typeof current !== 'number' || typeof moveBy !== 'number') return null;
   if (moveBy <= 0) return null;
-  const next = (current + moveBy) % 52;
-  return next;
+  if (isBase(color, current)) {
+    if (moveBy !== 6) return null;
+    return START_POSITIONS[color];
+  }
+  let pos = current;
+  for (let i = 0; i < moveBy; i++) {
+    if (pos === HOME_END[color]) return null; // cannot move beyond home end
+    pos = stepOnce(color, pos);
+  }
+  return pos;
 }
 function sanitizeLudoState(state) {
   return {
