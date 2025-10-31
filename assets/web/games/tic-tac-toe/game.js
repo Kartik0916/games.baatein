@@ -1515,5 +1515,19 @@ function sendGameOverToFlutter(finalScore) {
 // Initialize game
 document.addEventListener('DOMContentLoaded', () => {
     window.game = new BaateinGame();
+    // Attempt auto-login from welcome page
+    try {
+        const storedName = localStorage.getItem('bg_username');
+        const storedAvatar = localStorage.getItem('bg_avatar');
+        if (storedName && storedAvatar && window.game) {
+            const userId = 'user_' + Math.random().toString(36).substr(2, 9);
+            window.game.user = { userId, username: storedName, avatar: storedAvatar };
+            window.game.connectToServer().then(() => {
+                if (window.game.username) window.game.username.textContent = storedName;
+                window.game.showGameSelection();
+                window.game.showNotification(`Welcome, ${storedName}!`, 'success');
+            }).catch(() => {/* ignore */});
+        }
+    } catch (e) { /* ignore */ }
 });
 

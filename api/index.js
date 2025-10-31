@@ -135,7 +135,7 @@ io.on('connection', (socket) => {
   // Create Room
   socket.on('createRoom', (data) => {
     try {
-      const { userId, username, avatar } = data;
+      const { userId, username, avatar, game } = data;
       
       if (!userId || !username) {
         socket.emit('error', { message: 'User ID and username are required' });
@@ -144,6 +144,7 @@ io.on('connection', (socket) => {
       
       const roomId = 'room_' + Math.random().toString(36).substr(2, 9);
       
+      const pickedGame = (game === 'ludo' ? 'ludo' : 'tic-tac-toe');
       const room = {
         roomId,
         players: [{ 
@@ -155,8 +156,8 @@ io.on('connection', (socket) => {
           symbol: 'X'
         }],
         status: 'waiting',
-        game: 'tic-tac-toe',
-        gameState: initializeGame(),
+        game: pickedGame,
+        gameState: pickedGame === 'tic-tac-toe' ? initializeGame() : null,
         currentTurn: null,
         createdAt: new Date()
       };
@@ -343,9 +344,30 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Ludo removed
+  // Ludo realtime events
+  socket.on('ludoRoll', (data) => {
+    try {
+      const { roomId, value } = data || {};
+      if (!roomId || typeof value !== 'number') return;
+      const room = activeRooms.get(roomId);
+      if (!room || room.game !== 'ludo') return;
+      io.to(roomId).emit('ludoRoll', { fromUserId: socket.userId, value });
+    } catch (e) {
+      console.error('❌ ludoRoll error:', e);
+    }
+  });
 
-  // Ludo removed
+  socket.on('ludoMove', (data) => {
+    try {
+      const { roomId, player, piece, dice } = data || {};
+      if (!roomId) return;
+      const room = activeRooms.get(roomId);
+      if (!room || room.game !== 'ludo') return;
+      io.to(roomId).emit('ludoMove', { fromUserId: socket.userId, player, piece, dice });
+    } catch (e) {
+      console.error('❌ ludoMove error:', e);
+    }
+  });
 
   // Chat Message
   socket.on('chatMessage', (data) => {
@@ -788,7 +810,7 @@ function sanitizeRoom(room) {
   };
 }
 
-function startGame(room) {
+  function startGame(room) {
   // Verify both players are ready and there are exactly 2 players
   if (room.players.length !== 2) {
     console.error(`❌ Cannot start game - need 2 players, got ${room.players.length}`);
@@ -808,13 +830,22 @@ function startGame(room) {
   room.winner = null;
   room.endTime = null;
 
-  // Ludo removed
+  if (room.game === 'ludo') {
+    console.log(`🎮 Ludo started in room ${room.roomId}`);
+    io.to(room.roomId).emit('gameStarted', {
+      game: 'ludo',
+      currentTurn: room.currentTurn,
+      players: room.players.map(p => ({ userId: p.userId, username: p.username, avatar: p.avatar }))
+    });
+    return;
+  }
 
   // Tic Tac Toe default
   room.gameState = initializeGame();
   console.log(`🎮 Game started in room ${room.roomId} with board:`, room.gameState.board);
 
   io.to(room.roomId).emit('gameStarted', {
+    game: 'tic-tac-toe',
     gameState: {
       board: [...room.gameState.board],
       moves: [],
