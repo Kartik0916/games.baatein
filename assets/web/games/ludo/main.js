@@ -2,15 +2,15 @@ import { Ludo } from './ludo/Ludo.js';
 import { UI } from './ludo/UI.js';
 
 // Server URL
-const WS_URL = window.WEBSOCKET_URL || 'https://games-baatein-backend.onrender.com';
+const WS_URL = window.LUDO_SERVER_URL || window.WEBSOCKET_URL || 'http://localhost:3000';
 
 // Create game instance (UI only; server is authoritative)
 const ludo = new Ludo();
 
 // DOM elements for lobby
-const lobby = document.getElementById('lobby');
-const waitingMsg = document.getElementById('waitingMsg');
-const gameContainer = document.getElementById('gameContainer');
+const lobbyScreen = document.getElementById('lobby-screen');
+const waitingScreen = document.getElementById('waiting-screen');
+const gameBoard = document.getElementById('game-board');
 const inputRoom = document.getElementById('roomCodeInput');
 const btnCreate = document.getElementById('createRoomBtn');
 const btnJoin = document.getElementById('joinRoomBtn');
@@ -47,30 +47,25 @@ function connect(){
   });
 
   // Lobby events
-  socket.on('ludoRoomCreated', (payload) => {
-    roomId = payload?.roomId; roomCodeEl.textContent = roomId || '-';
-    waitingMsg.style.display = 'block';
-    btnReady.disabled = false;
-    try { UI.disableDice(); } catch(e) { document.getElementById('dice-btn').disabled = true; }
-  });
-
-  socket.on('ludoRoomJoined', (payload) => {
-    roomId = payload?.roomId; roomCodeEl.textContent = roomId || '-';
-    waitingMsg.style.display = 'block';
+  // New generic events for separate Ludo server
+  socket.on('roomID', (id) => {
+    roomId = id; roomCodeEl.textContent = id || '-';
+    lobbyScreen.style.display = 'flex';
+    waitingScreen.style.display = 'block';
     btnReady.disabled = false;
   });
 
-  socket.on('ludoGameStart', (state) => {
-    // Hide lobby, show board
-    lobby.style.display = 'none';
-    waitingMsg.style.display = 'none';
-    gameContainer.style.display = 'block';
+  socket.on('gameStart', (payload) => {
+    const state = payload?.state || payload;
+    lobbyScreen.style.display = 'none';
+    waitingScreen.style.display = 'none';
+    gameBoard.style.display = 'block';
     isLive = true;
     applyState(state);
     try { UI.enableDice(); } catch(e) { document.getElementById('dice-btn').disabled = false; }
   });
 
-  socket.on('ludoGameState', (state) => {
+  socket.on('gameStateUpdate', (state) => {
     applyState(state);
   });
 }
@@ -103,32 +98,32 @@ function applyState(state){
 const _onDiceClick = ludo.onDiceClick.bind(ludo);
 ludo.onDiceClick = function(){
   if (!isLive || !roomId) return;
-  socket.emit('ludoRollDice', { roomId });
+  socket.emit('rollDice');
 };
 
 const _handlePieceClick = ludo.handlePieceClick.bind(ludo);
 ludo.handlePieceClick = function(player, piece){
   if (!isLive || !roomId) return;
-  socket.emit('ludoMovePiece', { roomId, player, piece });
+  socket.emit('movePiece', { pieceIndex: piece, player });
 };
 
 // Wire lobby buttons
 btnCreate.addEventListener('click', () => {
   connect();
-  socket.emit('ludoCreateRoom', ensureUser());
+  socket.emit('createGame');
 });
 
 btnJoin.addEventListener('click', () => {
   connect();
   const rid = (inputRoom.value||'').trim();
   if (!rid) return;
-  socket.emit('ludoJoinRoom', { roomId: rid, ...ensureUser() });
+  socket.emit('joinGame', rid);
 });
 
 btnReady.addEventListener('click', () => {
   if (!roomId) return;
-  socket.emit('ludoPlayerReady', { roomId });
-  waitingMsg.textContent = 'Ready. Waiting for opponent…';
+  socket.emit('playerReady');
+  waitingScreen.textContent = 'Ready. Waiting for opponent…';
   btnReady.disabled = true;
 });
 

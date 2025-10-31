@@ -464,6 +464,91 @@ io.on('connection', (socket) => {
     } catch (e) { console.error('❌ ludoMovePiece error:', e); }
   });
 
+  // Aliases for unified Ludo events expected by frontend (single backend)
+  socket.on('createGame', () => {
+    try {
+      const roomId = 'ludo_' + Math.random().toString(36).substr(2, 6);
+      const state = createInitialLudoState(roomId);
+      const user = { userId: socket.userId || socket.id, username: socket.username || 'Player', socketId: socket.id };
+      state.players = { P1: user };
+      state.colors = { [user.userId]: 'P1' };
+      activeLudoGames.set(roomId, state);
+      socket.join(roomId);
+      socket.roomId = roomId;
+      socket.emit('roomID', roomId);
+    } catch (e) { console.error('❌ createGame alias error:', e); }
+  });
+
+  socket.on('joinGame', (roomId) => {
+    try {
+      const state = activeLudoGames.get(roomId);
+      if (!state) { socket.emit('error', { message: 'Room not found' }); return; }
+      if (state.players && state.players.P2) { socket.emit('error', { message: 'Room full' }); return; }
+      const user = { userId: socket.userId || socket.id, username: socket.username || 'Player', socketId: socket.id };
+      state.players = state.players || {};
+      state.players.P2 = user;
+      state.colors[user.userId] = 'P2';
+      socket.join(roomId);
+      socket.roomId = roomId;
+      io.to(roomId).emit('roomID', roomId);
+    } catch (e) { console.error('❌ joinGame alias error:', e); }
+  });
+
+  socket.on('playerReady', () => {
+    try {
+      const roomId = socket.roomId;
+      if (!roomId) return;
+      const state = activeLudoGames.get(roomId);
+      if (!state) return;
+      state.ready = state.ready || new Set();
+      state.ready.add(socket.userId || socket.id);
+      if (state.ready.size >= 2) {
+        state.status = 'active';
+        io.to(roomId).emit('gameStart', { state: sanitizeLudoState(state) });
+        io.to(roomId).emit('gameStateUpdate', sanitizeLudoState(state));
+      }
+    } catch (e) { console.error('❌ playerReady alias error:', e); }
+  });
+
+  socket.on('rollDice', () => {
+    try {
+      const roomId = socket.roomId;
+      const state = activeLudoGames.get(roomId);
+      if (!state || state.status !== 'active') return;
+      const color = state.colors[socket.userId || socket.id];
+      if (!color || color !== state.turn) return;
+      state.diceValue = 1 + Math.floor(Math.random() * 6);
+      io.to(roomId).emit('gameStateUpdate', sanitizeLudoState(state));
+    } catch (e) { console.error('❌ rollDice alias error:', e); }
+  });
+
+  socket.on('movePiece', (payload) => {
+    try {
+      const roomId = socket.roomId;
+      const state = activeLudoGames.get(roomId);
+      if (!state || state.status !== 'active') return;
+      const color = state.colors[socket.userId || socket.id];
+      if (!color || color !== state.turn) return;
+      const idx = Number(payload?.pieceIndex ?? payload?.piece);
+      if (Number.isNaN(idx)) return;
+      const pos = state.positions[color][idx];
+      const roll = state.diceValue || 0;
+      if (roll <= 0) return;
+      const next = getNextLudoPosition(color, pos, roll);
+      if (next === null) return;
+      state.positions[color][idx] = next;
+      const other = color === 'P1' ? 'P2' : 'P1';
+      for (let i = 0; i < 4; i++) {
+        if (state.positions[other][i] === next && !SAFE_POSITIONS.includes(next)) {
+          state.positions[other][i] = other === 'P1' ? 0 : 26;
+        }
+      }
+      if (roll !== 6) state.turn = state.turn === 'P1' ? 'P2' : 'P1';
+      state.diceValue = null;
+      io.to(roomId).emit('gameStateUpdate', sanitizeLudoState(state));
+    } catch (e) { console.error('❌ movePiece alias error:', e); }
+  });
+
   // Chat Message
   socket.on('chatMessage', (data) => {
     const { roomId, message } = data;
@@ -905,7 +990,7 @@ function sanitizeRoom(room) {
   };
 }
 
-  function startGame(room) {
+function startGame(room) {
   // Verify both players are ready and there are exactly 2 players
   if (room.players.length !== 2) {
     console.error(`❌ Cannot start game - need 2 players, got ${room.players.length}`);

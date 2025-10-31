@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LudoJS Tutorial</title>
     <link rel="stylesheet" href="./ludo/style.css">
+    <script>
+      // Use the same backend as Tic-Tac-Toe by default
+      window.WEBSOCKET_URL = window.WEBSOCKET_URL || 'https://games-baatein-backend.onrender.com';
+    </script>
     <style>
       .lobby{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;justify-content:center;margin:12px auto;padding:8px 10px}
       .lobby .input{padding:.55rem .75rem;border:1px solid #e5e7eb;border-radius:8px}
@@ -14,7 +18,7 @@
     </style>
 </head>
 <body>
-    <div class="lobby" id="lobby">
+    <div class="lobby" id="lobby-screen">
       <a href="../../select.html" class="btn">Home</a>
       <span>Room:</span>
       <input id="roomCodeInput" class="input" placeholder="Enter room code" />
@@ -24,8 +28,8 @@
       <span>Code: <b id="roomCode">-</b></span>
       <span>You: <b id="youName"></b></span>
     </div>
-    <div class="waiting" id="waitingMsg">Waiting for opponent… share the room code and press Ready.</div>
-    <div class="ludo-container" id="gameContainer" style="display:none;">
+    <div class="waiting" id="waiting-screen" style="display:none;">Waiting for opponent… share the room code and press Ready.</div>
+    <div class="ludo-container" id="game-board" style="display:none;">
         <div class="ludo">
             <div class="player-pieces">
                 <div class="player-piece" player-id="P1" piece="0"></div>
