@@ -17,12 +17,14 @@ const btnJoin = document.getElementById('joinRoomBtn');
 const btnReady = document.getElementById('readyBtn');
 const roomCodeEl = document.getElementById('roomCode');
 const youNameEl = document.getElementById('youName');
+const statusEl = document.getElementById('status');
 
 // Local session identity
 let socket;
 let user = null;
 let roomId = null;
 let isLive = false; // becomes true after ludoGameStart
+let isConnected = false;
 
 function ensureUser(){
   if (user) return user;
@@ -44,6 +46,12 @@ function connect(){
 
   socket.on('connect', () => {
     socket.emit('authenticate', user);
+    isConnected = true;
+    if (statusEl) { statusEl.style.display = 'none'; statusEl.textContent = ''; }
+  });
+
+  socket.on('connect_error', (err) => {
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = `Connection error: ${err?.message||err}`; }
   });
 
   // Lobby events
@@ -110,19 +118,22 @@ ludo.handlePieceClick = function(player, piece){
 // Wire lobby buttons
 btnCreate.addEventListener('click', () => {
   connect();
-  socket.emit('createGame');
+  const emitCreate = () => socket.emit('createGame');
+  if (isConnected) emitCreate(); else socket.once('connect', emitCreate);
 });
 
 btnJoin.addEventListener('click', () => {
   connect();
   const rid = (inputRoom.value||'').trim();
   if (!rid) return;
-  socket.emit('joinGame', rid);
+  const emitJoin = () => socket.emit('joinGame', rid);
+  if (isConnected) emitJoin(); else socket.once('connect', emitJoin);
 });
 
 btnReady.addEventListener('click', () => {
   if (!roomId) return;
-  socket.emit('playerReady');
+  const emitReady = () => socket.emit('playerReady');
+  if (isConnected) emitReady(); else socket.once('connect', emitReady);
   waitingScreen.textContent = 'Ready. Waiting for opponent…';
   btnReady.disabled = true;
 });
