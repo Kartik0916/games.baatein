@@ -115,6 +115,20 @@ function applyState(state){
       });
     });
   }
+
+  // Highlight valid moves only for me when it's my turn
+  try { UI.unhighlightPieces(); } catch(e) {}
+  let myColor = null;
+  try {
+    const me = user?.userId;
+    if (state.players?.P1?.userId === me) myColor = 'P1';
+    else if (state.players?.P2?.userId === me) myColor = 'P2';
+  } catch(e) {}
+  const diceBtn = document.getElementById('dice-btn');
+  if (diceBtn) diceBtn.disabled = !(myColor && state.turn === myColor);
+  if (myColor && state.turn === myColor && Array.isArray(state.validMoves)) {
+    try { UI.highlightPieces(myColor, state.validMoves); } catch(e) {}
+  }
 }
 
 // Patch interactive actions to emit to server

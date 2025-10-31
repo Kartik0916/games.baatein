@@ -139,6 +139,10 @@ function sanitizeLudoState(state) {
     positions: { P1: [...state.positions.P1], P2: [...state.positions.P2] },
     diceValue: state.diceValue,
     turn: state.turn,
+    players: {
+      P1: state.players?.P1 ? { userId: state.players.P1.userId, username: state.players.P1.username } : null,
+      P2: state.players?.P2 ? { userId: state.players.P2.userId, username: state.players.P2.username } : null
+    }
   };
 }
 
@@ -534,7 +538,14 @@ io.on('connection', (socket) => {
       const color = state.colors[socket.userId || socket.id];
       if (!color || color !== state.turn) return;
       state.diceValue = 1 + Math.floor(Math.random() * 6);
-      io.to(roomId).emit('gameStateUpdate', sanitizeLudoState(state));
+      const valid = [];
+      for (let i = 0; i < 4; i++) {
+        const pos = state.positions[color][i];
+        const next = getNextLudoPosition(color, pos, state.diceValue);
+        if (next !== null) valid.push(i);
+      }
+      const payload = { ...sanitizeLudoState(state), validMoves: valid };
+      io.to(roomId).emit('gameStateUpdate', payload);
     } catch (e) { console.error('❌ rollDice alias error:', e); }
   });
 
@@ -561,7 +572,8 @@ io.on('connection', (socket) => {
       }
       if (roll !== 6) state.turn = state.turn === 'P1' ? 'P2' : 'P1';
       state.diceValue = null;
-      io.to(roomId).emit('gameStateUpdate', sanitizeLudoState(state));
+      const payload = sanitizeLudoState(state);
+      io.to(roomId).emit('gameStateUpdate', payload);
     } catch (e) { console.error('❌ movePiece alias error:', e); }
   });
 
