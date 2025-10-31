@@ -2,7 +2,7 @@ import { Ludo } from './ludo/Ludo.js';
 import { UI } from './ludo/UI.js';
 
 // Server URL
-const WS_URL = window.LUDO_SERVER_URL || window.WEBSOCKET_URL || 'http://localhost:3000';
+const WS_URL = window.LUDO_SERVER_URL || window.WEBSOCKET_URL || 'https://games-baatein-backend.onrender.com';
 
 // Create game instance (UI only; server is authoritative)
 const ludo = new Ludo();
@@ -23,7 +23,8 @@ const statusEl = document.getElementById('status');
 let socket;
 let user = null;
 let roomId = null;
-let isLive = false; // becomes true after ludoGameStart
+let myColor = null; // CRITICAL: Track which color this player is
+let isLive = false;
 let isConnected = false;
 
 function ensureUser(){
@@ -54,13 +55,13 @@ function connect(){
   });
 
   socket.on('connect', () => {
+    console.log('🔌 Connected to server');
     socket.emit('authenticate', user);
     isConnected = true;
     if (statusEl) { statusEl.style.display = 'none'; statusEl.textContent = ''; }
   });
 
   socket.on('connect_error', (err) => {
-    // Show only if not connected/connecting
     if (!socket.connected) {
       if (statusEl) {
         statusEl.style.display = 'block';
@@ -69,79 +70,161 @@ function connect(){
     }
   });
 
-  // Lobby events
-  // New generic events for separate Ludo server
+  // Room created
   socket.on('roomID', (id) => {
-    roomId = id; roomCodeEl.textContent = id || '-';
+    roomId = id;
+    roomCodeEl.textContent = id || '-';
     lobbyScreen.style.display = 'flex';
     waitingScreen.style.display = 'block';
     btnReady.disabled = false;
+    console.log('📦 Room created:', id);
   });
 
+  // Game starts - CRITICAL: Get my color assignment
   socket.on('gameStart', (payload) => {
+    console.log('🎮 Game started, payload:', payload);
     const state = payload?.state || payload;
+    
+    // CRITICAL: Determine my color from server state
+    if (state.players) {
+      if (state.players.P1?.userId === user.userId) {
+        myColor = 'P1';
+      } else if (state.players.P2?.userId === user.userId) {
+        myColor = 'P2';
+      }
+    }
+    
+    console.log('🎨 My color is:', myColor);
+    
     lobbyScreen.style.display = 'none';
     waitingScreen.style.display = 'none';
     gameBoard.style.display = 'block';
     isLive = true;
+    
+    // Apply initial state from server
     applyState(state);
-    try { UI.enableDice(); } catch(e) { document.getElementById('dice-btn').disabled = false; }
+    
+    // Only enable dice if it's my turn
+    updateDiceButton(state);
   });
 
+  // State updates from server
   socket.on('gameStateUpdate', (state) => {
+    console.log('📡 State update:', state);
     applyState(state);
+    updateDiceButton(state);
   });
 }
 
-// Apply authoritative state to UI
+// Apply authoritative state to UI - FIXED VERSION
 function applyState(state){
   if (!state) return;
+  
+  console.log('🔄 Applying state:', state);
+  
   // Update dice display
-  if (typeof state.diceValue === 'number') {
-    ludo.diceValue = state.diceValue; // triggers UI.setDiceValue
+  if (typeof state.diceValue === 'number' && state.diceValue > 0) {
+    ludo.diceValue = state.diceValue;
+    try { UI.setDiceValue(state.diceValue); } catch(e) { console.error(e); }
+  } else {
+    try { UI.setDiceValue(''); } catch(e) {}
   }
+  
   // Update active player label
-  try { document.querySelector('.active-player span').textContent = state.turn || 'P1'; } catch(e) {}
+  try { 
+    const turnLabel = state.turn || 'P1';
+    const isMyTurn = (myColor === turnLabel);
+    document.querySelector('.active-player span').textContent = isMyTurn ? 'Your Turn' : `${turnLabel}'s Turn`;
+  } catch(e) {}
 
-  // Update piece positions
+  // Update piece positions - CRITICAL: Use server positions directly
   if (state.positions) {
     ['P1','P2'].forEach(player => {
       const arr = state.positions[player] || [];
       [0,1,2,3].forEach(piece => {
         const pos = arr[piece];
         if (typeof pos === 'number') {
+          // Update local game state to match server
+          ludo.currentPositions[player][piece] = pos;
+          // Update UI
           ludo.setPiecePosition(player, piece, pos);
         }
       });
     });
   }
 
-  // Highlight valid moves only for me when it's my turn
+  // Highlight valid moves ONLY for me when it's my turn
   try { UI.unhighlightPieces(); } catch(e) {}
-  let myColor = null;
-  try {
-    const me = user?.userId;
-    if (state.players?.P1?.userId === me) myColor = 'P1';
-    else if (state.players?.P2?.userId === me) myColor = 'P2';
-  } catch(e) {}
-  const diceBtn = document.getElementById('dice-btn');
-  if (diceBtn) diceBtn.disabled = !(myColor && state.turn === myColor);
-  if (myColor && state.turn === myColor && Array.isArray(state.validMoves)) {
-    try { UI.highlightPieces(myColor, state.validMoves); } catch(e) {}
+  
+  const isMyTurn = (myColor && state.turn === myColor);
+  
+  if (isMyTurn && Array.isArray(state.validMoves) && state.validMoves.length > 0) {
+    console.log('✨ Highlighting my pieces:', state.validMoves);
+    try { UI.highlightPieces(myColor, state.validMoves); } catch(e) { console.error(e); }
   }
 }
 
-// Patch interactive actions to emit to server
+// Update dice button state
+function updateDiceButton(state) {
+  const diceBtn = document.getElementById('dice-btn');
+  if (!diceBtn) return;
+  
+  const isMyTurn = (myColor && state.turn === myColor);
+  const canRoll = isMyTurn && (!state.diceValue || state.diceValue === 0);
+  
+  diceBtn.disabled = !canRoll;
+  
+  if (canRoll) {
+    try { UI.enableDice(); } catch(e) {}
+  } else {
+    try { UI.disableDice(); } catch(e) {}
+  }
+}
+
+// Patch dice click - SEND TO SERVER, DON'T ROLL LOCALLY
 const _onDiceClick = ludo.onDiceClick.bind(ludo);
 ludo.onDiceClick = function(){
-  if (!isLive || !roomId) return;
-  socket.emit('rollDice');
+  if (!isLive || !roomId) {
+    console.log('⚠️ Cannot roll: game not live or no room');
+    return;
+  }
+  
+  if (!myColor) {
+    console.log('⚠️ Cannot roll: color not assigned');
+    return;
+  }
+  
+  console.log('🎲 Requesting dice roll for', myColor);
+  
+  // CRITICAL: Don't roll locally - ask server
+  socket.emit('rollDice', { roomId });
+  
+  // Disable dice button immediately
+  try { UI.disableDice(); } catch(e) {}
 };
 
+// Patch piece click - SEND TO SERVER
 const _handlePieceClick = ludo.handlePieceClick.bind(ludo);
 ludo.handlePieceClick = function(player, piece){
-  if (!isLive || !roomId) return;
-  socket.emit('movePiece', { pieceIndex: piece, player });
+  if (!isLive || !roomId) {
+    console.log('⚠️ Cannot move: game not live or no room');
+    return;
+  }
+  
+  // CRITICAL: Only allow moving my own pieces
+  if (player !== myColor) {
+    console.log('⚠️ Cannot move opponent pieces');
+    return;
+  }
+  
+  console.log('🎯 Moving piece:', player, piece);
+  
+  // Send move to server
+  socket.emit('movePiece', { 
+    roomId,
+    pieceIndex: parseInt(piece), 
+    player 
+  });
 };
 
 // Wire lobby buttons
@@ -169,3 +252,4 @@ btnReady.addEventListener('click', () => {
 
 // Initial UI state
 try { UI.disableDice(); } catch(e) {}
+console.log('🎮 Ludo client initialized');

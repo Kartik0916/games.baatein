@@ -83,22 +83,12 @@ app.get('/health', (req, res) => {
 // Game Storage
 const activeRooms = new Map();
 const userSockets = new Map();
-// Ludo server-authoritative state
-const activeLudoGames = new Map(); // roomId -> state
+// Add this section to api/index.js, replacing the existing Ludo handlers
 
-function createInitialLudoState(roomId) {
-  return {
-    roomId,
-    status: 'waiting',
-    players: {}, // color -> { userId, username, socketId }
-    colors: {}, // userId -> 'P1' | 'P2'
-    positions: { P1: [500,501,502,503], P2: [600,601,602,603] }, // base indices (match client)
-    diceValue: null,
-    turn: 'P1',
-  };
-}
+// Ludo game state storage (server-authoritative)
+const activeLudoGames = new Map(); // roomId -> game state
 
-// Ludo helpers matching client constants
+// Ludo constants matching client
 const BASE_POSITIONS = { P1: [500,501,502,503], P2: [600,601,602,603] };
 const START_POSITIONS = { P1: 0, P2: 26 };
 const TURNING_POINTS = { P1: 50, P2: 24 };
@@ -106,476 +96,359 @@ const HOME_START = { P1: 100, P2: 200 };
 const HOME_END = { P1: 105, P2: 205 };
 const SAFE_POSITIONS = [0,8,13,21,26,34,39,47];
 
+function createInitialLudoState(roomId) {
+  return {
+    roomId,
+    status: 'waiting',
+    players: {}, // { P1: {userId, username, socketId}, P2: {...} }
+    readyPlayers: new Set(),
+    positions: { 
+      P1: [500, 501, 502, 503], // All pieces at base
+      P2: [600, 601, 602, 603] 
+    },
+    diceValue: null,
+    turn: 'P1', // P1 always starts
+    validMoves: []
+  };
+}
+
 function isBase(color, pos) {
   return BASE_POSITIONS[color] && BASE_POSITIONS[color].includes(pos);
 }
 
 function stepOnce(color, pos) {
-  if (pos === 51) return 0; // wrap
-  if (pos === TURNING_POINTS[color]) return HOME_START[color]; // enter home track
-  if (pos >= HOME_START[color] && pos < HOME_END[color]) return pos + 1; // progress home
-  if (pos === HOME_END[color]) return pos; // already finished slot
-  return (pos + 1) % 52; // main track
+  // Wrap around main track
+  if (pos === 51) return 0;
+  
+  // Enter home track at turning point
+  if (pos === TURNING_POINTS[color]) return HOME_START[color];
+  
+  // Progress in home track
+  if (pos >= HOME_START[color] && pos < HOME_END[color]) return pos + 1;
+  
+  // Already at home end
+  if (pos === HOME_END[color]) return pos;
+  
+  // Normal main track movement
+  return pos + 1;
 }
 
-function getNextLudoPosition(color, current, moveBy) {
-  if (typeof current !== 'number' || typeof moveBy !== 'number') return null;
-  if (moveBy <= 0) return null;
-  if (isBase(color, current)) {
-    if (moveBy !== 6) return null;
+function getNextPosition(color, currentPos, steps) {
+  if (typeof currentPos !== 'number' || typeof steps !== 'number') return null;
+  if (steps <= 0) return null;
+  
+  // Can only leave base with a 6
+  if (isBase(color, currentPos)) {
+    if (steps !== 6) return null;
     return START_POSITIONS[color];
   }
-  let pos = current;
-  for (let i = 0; i < moveBy; i++) {
-    if (pos === HOME_END[color]) return null; // cannot move beyond home end
+  
+  // Move step by step
+  let pos = currentPos;
+  for (let i = 0; i < steps; i++) {
+    // Can't move beyond home end
+    if (pos === HOME_END[color]) return null;
     pos = stepOnce(color, pos);
   }
+  
   return pos;
 }
-function sanitizeLudoState(state) {
-  return {
-    roomId: state.roomId,
-    status: state.status,
-    positions: { P1: [...state.positions.P1], P2: [...state.positions.P2] },
-    diceValue: state.diceValue,
-    turn: state.turn,
-    players: {
-      P1: state.players?.P1 ? { userId: state.players.P1.userId, username: state.players.P1.username } : null,
-      P2: state.players?.P2 ? { userId: state.players.P2.userId, username: state.players.P2.username } : null
+
+function getValidMoves(state, color, diceValue) {
+  const moves = [];
+  const positions = state.positions[color];
+  
+  for (let i = 0; i < 4; i++) {
+    const currentPos = positions[i];
+    const nextPos = getNextPosition(color, currentPos, diceValue);
+    
+    if (nextPos !== null) {
+      moves.push(i);
     }
-  };
+  }
+  
+  return moves;
 }
 
-// Initialize Game
-function initializeGame() {
-  return { 
-    board: Array(9).fill(null), 
-    moves: [],
-    winner: null,
-    isDraw: false,
-    gameOver: false
-  };
+function performKillCheck(state, color, pieceIndex) {
+  const currentPos = state.positions[color][pieceIndex];
+  const opponent = color === 'P1' ? 'P2' : 'P1';
+  
+  // Can't kill on safe positions
+  if (SAFE_POSITIONS.includes(currentPos)) return false;
+  
+  // Can't kill in home tracks
+  if (currentPos >= 100) return false;
+  
+  let killed = false;
+  
+  // Check each opponent piece
+  for (let i = 0; i < 4; i++) {
+    const opponentPos = state.positions[opponent][i];
+    
+    // If opponent is at same position (and not safe)
+    if (opponentPos === currentPos) {
+      // Send opponent back to base
+      state.positions[opponent][i] = BASE_POSITIONS[opponent][i];
+      killed = true;
+      console.log(`💀 ${color} killed ${opponent} piece ${i}`);
+    }
+  }
+  
+  return killed;
 }
 
-// Socket.IO Events
-io.on('connection', (socket) => {
-  console.log('🔌 Client connected:', socket.id);
+function switchTurn(state, gotSix, killedOpponent) {
+  // Keep turn if rolled 6 or killed opponent
+  if (gotSix || killedOpponent) {
+    console.log(`🔄 ${state.turn} keeps turn (six: ${gotSix}, kill: ${killedOpponent})`);
+    return;
+  }
+  
+  // Otherwise switch turn
+  state.turn = state.turn === 'P1' ? 'P2' : 'P1';
+  console.log(`🔄 Turn switched to ${state.turn}`);
+}
 
-  // Authentication
-  socket.on('authenticate', (data) => {
-    try {
-      const { userId, username, avatar } = data;
-      
-      if (!userId || !username) {
-        socket.emit('error', { message: 'User ID and username are required' });
-        return;
-      }
-      
-      socket.userId = userId;
-      socket.username = username;
-      socket.avatar = avatar || '😀';
-      userSockets.set(userId, socket.id);
-      
-      socket.emit('authenticated', { success: true, socketId: socket.id });
-      console.log(`✅ User authenticated: ${username}`);
-    } catch (error) {
-      console.error('❌ Authentication error:', error);
-      socket.emit('error', { message: 'Authentication failed' });
+// Socket event: Create Ludo game
+socket.on('createGame', () => {
+  try {
+    const roomId = 'ludo_' + Math.random().toString(36).substr(2, 6);
+    const state = createInitialLudoState(roomId);
+    
+    // Assign creator as P1
+    state.players.P1 = {
+      userId: socket.userId,
+      username: socket.username,
+      socketId: socket.id
+    };
+    
+    activeLudoGames.set(roomId, state);
+    socket.join(roomId);
+    socket.roomId = roomId;
+    
+    socket.emit('roomID', roomId);
+    console.log(`🎮 Ludo room ${roomId} created by ${socket.username}`);
+  } catch (e) {
+    console.error('❌ createGame error:', e);
+    socket.emit('error', { message: 'Failed to create game' });
+  }
+});
+
+// Socket event: Join Ludo game
+socket.on('joinGame', (roomId) => {
+  try {
+    const state = activeLudoGames.get(roomId);
+    
+    if (!state) {
+      socket.emit('error', { message: 'Room not found' });
+      return;
     }
-  });
+    
+    if (state.players.P2) {
+      socket.emit('error', { message: 'Room is full' });
+      return;
+    }
+    
+    // Assign joiner as P2
+    state.players.P2 = {
+      userId: socket.userId,
+      username: socket.username,
+      socketId: socket.id
+    };
+    
+    socket.join(roomId);
+    socket.roomId = roomId;
+    
+    // Notify both players
+    io.to(roomId).emit('roomID', roomId);
+    
+    console.log(`👥 ${socket.username} joined Ludo room ${roomId}`);
+  } catch (e) {
+    console.error('❌ joinGame error:', e);
+    socket.emit('error', { message: 'Failed to join game' });
+  }
+});
 
-  // Create Room
-  socket.on('createRoom', (data) => {
-    try {
-      const { userId, username, avatar, game } = data;
+// Socket event: Player ready
+socket.on('playerReady', () => {
+  try {
+    const roomId = socket.roomId;
+    if (!roomId) return;
+    
+    const state = activeLudoGames.get(roomId);
+    if (!state) return;
+    
+    // Mark player as ready
+    state.readyPlayers.add(socket.userId);
+    
+    console.log(`✅ ${socket.username} ready (${state.readyPlayers.size}/2)`);
+    
+    // Start game when both players ready
+    if (state.readyPlayers.size >= 2) {
+      state.status = 'active';
+      state.turn = 'P1'; // P1 always starts
       
-      if (!userId || !username) {
-        socket.emit('error', { message: 'User ID and username are required' });
-        return;
-      }
-      
-      const roomId = 'room_' + Math.random().toString(36).substr(2, 9);
-      
-      const pickedGame = (game === 'ludo' ? 'ludo' : 'tic-tac-toe');
-      const room = {
-        roomId,
-        players: [{ 
-          userId, 
-          username, 
-          avatar: avatar || '😀', 
-          socketId: socket.id, 
-          ready: false,
-          symbol: 'X'
-        }],
-        status: 'waiting',
-        game: pickedGame,
-        gameState: pickedGame === 'tic-tac-toe' ? initializeGame() : null,
-        currentTurn: null,
-        createdAt: new Date()
+      // Send game start with full state
+      const gameState = {
+        status: state.status,
+        players: state.players,
+        positions: state.positions,
+        turn: state.turn,
+        diceValue: null,
+        validMoves: []
       };
-
-      activeRooms.set(roomId, room);
-      socket.join(roomId);
-      socket.roomId = roomId;
-
-      socket.emit('roomCreated', { 
-        success: true, 
-        room: sanitizeRoom(room) 
-      });
       
-      console.log(`🎮 Room created: ${roomId}`);
-    } catch (error) {
-      console.error('❌ Create room error:', error);
-      socket.emit('error', { message: 'Failed to create room' });
+      io.to(roomId).emit('gameStart', { state: gameState });
+      console.log(`🎮 Ludo game ${roomId} started!`);
     }
-  });
+  } catch (e) {
+    console.error('❌ playerReady error:', e);
+  }
+});
 
-  // Join Room
-  socket.on('joinRoom', (data) => {
-    try {
-      const { roomId, userId, username, avatar } = data;
-      
-      if (!roomId || !userId || !username) {
-        socket.emit('error', { message: 'Room ID, User ID, and username are required' });
-        return;
-      }
-      
-      const room = activeRooms.get(roomId);
-
-      if (!room) {
-        socket.emit('error', { message: 'Room not found' });
-        return;
-      }
-      
-      if (room.players.length >= 2) {
-        socket.emit('error', { message: 'Room is full' });
-        return;
-      }
-
-      if (room.status !== 'waiting') {
-        socket.emit('error', { message: 'Game already started' });
-        return;
-      }
-
-      if (room.players.some(p => p.userId === userId)) {
-        socket.emit('error', { message: 'User already in this room' });
-        return;
-      }
-
-      room.players.push({ 
-        userId, 
-        username, 
-        avatar: avatar || '😀', 
-        socketId: socket.id, 
-        ready: false,
-        symbol: 'O'
-      });
-      
-      socket.join(roomId);
-      socket.roomId = roomId;
-
-      io.to(roomId).emit('playerJoined', {
-        player: { userId, username, avatar: avatar || '😀' },
-        room: sanitizeRoom(room)
-      });
-      
-      console.log(`👥 Player ${username} joined room ${roomId}`);
-    } catch (error) {
-      console.error('❌ Join room error:', error);
-      socket.emit('error', { message: 'Failed to join room' });
+// Socket event: Roll dice
+socket.on('rollDice', (data) => {
+  try {
+    const roomId = data?.roomId || socket.roomId;
+    if (!roomId) return;
+    
+    const state = activeLudoGames.get(roomId);
+    if (!state || state.status !== 'active') return;
+    
+    // Find which color this player is
+    let playerColor = null;
+    if (state.players.P1?.userId === socket.userId) playerColor = 'P1';
+    else if (state.players.P2?.userId === socket.userId) playerColor = 'P2';
+    
+    if (!playerColor) {
+      console.log('❌ Player not found in game');
+      return;
     }
-  });
-
-  // Player Ready
-  socket.on('playerReady', (data) => {
-    try {
-      const { roomId } = data;
-      
-      if (!roomId) {
-        socket.emit('error', { message: 'Room ID is required' });
-        return;
-      }
-      
-      const room = activeRooms.get(roomId);
-      if (!room) {
-        socket.emit('error', { message: 'Room not found' });
-        return;
-      }
-
-      const player = room.players.find(p => p.socketId === socket.id);
-      if (!player) {
-        socket.emit('error', { message: 'Player not found in room' });
-        return;
-      }
-      
-      player.ready = true;
-
-      io.to(roomId).emit('playerReadyUpdate', {
-        players: room.players.map(p => ({ 
-          userId: p.userId, 
-          username: p.username, 
-          avatar: p.avatar,
-          symbol: p.symbol,
-          ready: p.ready 
-        }))
-      });
-
-      // Start game if both players ready - VERIFY before starting
-      const allReady = room.players.length === 2 && room.players.every(p => p.ready === true);
-      
-      console.log(`🔍 Player ready check:`, {
-        roomId: roomId,
-        playersCount: room.players.length,
-        allReady: allReady,
-        players: room.players.map(p => ({ username: p.username, ready: p.ready }))
-      });
-      
-      if (allReady) {
-        // Add small delay to ensure both players have updated their UI
-        setTimeout(() => {
-          startGame(room);
-        }, 100);
-      }
-    } catch (error) {
-      console.error('❌ Player ready error:', error);
-      socket.emit('error', { message: 'Failed to mark player as ready' });
+    
+    // Check if it's this player's turn
+    if (state.turn !== playerColor) {
+      console.log(`❌ Not ${playerColor}'s turn (turn: ${state.turn})`);
+      socket.emit('error', { message: 'Not your turn' });
+      return;
     }
-  });
-
-  // Make Move
-  socket.on('makeMove', (data) => {
-    try {
-      const { roomId, move } = data;
-      
-      if (!roomId || move === undefined || move === null) {
-        socket.emit('error', { message: 'Room ID and move are required' });
-        return;
-      }
-      
-      const room = activeRooms.get(roomId);
-      
-      if (!room || room.status !== 'active') {
-        socket.emit('error', { message: 'Invalid game state' });
-        return;
-      }
-
-      const player = room.players.find(p => p.socketId === socket.id);
-      if (!player || room.currentTurn !== player.userId) {
-        socket.emit('error', { message: 'Not your turn' });
-        return;
-      }
-
-      const result = processMove(room, move, player);
-      
-      if (result.valid) {
-        room.gameState = result.newState;
-        room.currentTurn = getNextPlayer(room, player.userId);
+    
+    // Roll dice (1-6)
+    const roll = 1 + Math.floor(Math.random() * 6);
+    state.diceValue = roll;
+    
+    // Calculate valid moves
+    state.validMoves = getValidMoves(state, playerColor, roll);
+    
+    console.log(`🎲 ${playerColor} rolled ${roll}, valid moves:`, state.validMoves);
+    
+    // Send updated state to both players
+    const gameState = {
+      positions: state.positions,
+      diceValue: state.diceValue,
+      turn: state.turn,
+      validMoves: state.validMoves,
+      players: state.players
+    };
+    
+    io.to(roomId).emit('gameStateUpdate', gameState);
+    
+    // If no valid moves, switch turn automatically
+    if (state.validMoves.length === 0) {
+      console.log(`❌ No valid moves for ${playerColor}`);
+      setTimeout(() => {
+        state.diceValue = null;
+        state.validMoves = [];
+        switchTurn(state, false, false);
         
-        io.to(roomId).emit('moveMade', {
-          move,
-          gameState: room.gameState,
-          currentTurn: room.currentTurn,
-          playerId: player.userId,
-          playerSymbol: player.symbol
-        });
-
-        if (result.gameOver) {
-          // Pass winning line information to endGame
-          endGame(room, {
-            winner: result.winner,
-            reason: 'normal',
-            winningLine: result.winningLine
-          });
-        }
-      } else {
-        socket.emit('error', { message: result.message || 'Invalid move' });
-      }
-    } catch (error) {
-      console.error('❌ Make move error:', error);
-      socket.emit('error', { message: 'Failed to process move' });
+        const newState = {
+          positions: state.positions,
+          diceValue: null,
+          turn: state.turn,
+          validMoves: [],
+          players: state.players
+        };
+        
+        io.to(roomId).emit('gameStateUpdate', newState);
+      }, 1500);
     }
-  });
+  } catch (e) {
+    console.error('❌ rollDice error:', e);
+  }
+});
 
-  // Ludo: lobby and gameplay (server-authoritative)
-  socket.on('ludoCreateRoom', (data) => {
-    try {
-      const state = createInitialLudoState('ludo_' + Math.random().toString(36).substr(2, 6));
-      const user = { userId: data?.userId, username: data?.username, socketId: socket.id };
-      state.players.P1 = user;
-      state.colors[user.userId] = 'P1';
-      activeLudoGames.set(state.roomId, state);
-      socket.join(state.roomId);
-      socket.roomId = state.roomId;
-      socket.emit('ludoRoomCreated', { roomId: state.roomId });
-    } catch (e) {
-      console.error('❌ ludoCreateRoom error:', e);
+// Socket event: Move piece
+socket.on('movePiece', (data) => {
+  try {
+    const roomId = data?.roomId || socket.roomId;
+    if (!roomId) return;
+    
+    const state = activeLudoGames.get(roomId);
+    if (!state || state.status !== 'active') return;
+    
+    const pieceIndex = parseInt(data?.pieceIndex ?? data?.piece);
+    if (isNaN(pieceIndex) || pieceIndex < 0 || pieceIndex > 3) return;
+    
+    // Find player color
+    let playerColor = null;
+    if (state.players.P1?.userId === socket.userId) playerColor = 'P1';
+    else if (state.players.P2?.userId === socket.userId) playerColor = 'P2';
+    
+    if (!playerColor || state.turn !== playerColor) {
+      console.log(`❌ Invalid move attempt by ${playerColor}`);
+      return;
     }
-  });
-
-  socket.on('ludoJoinRoom', (data) => {
-    try {
-      const { roomId, userId, username } = data || {};
-      const state = activeLudoGames.get(roomId);
-      if (!state) { socket.emit('error', { message: 'Room not found' }); return; }
-      if (state.players.P2) { socket.emit('error', { message: 'Room full' }); return; }
-      const user = { userId, username, socketId: socket.id };
-      state.players.P2 = user;
-      state.colors[userId] = 'P2';
-      socket.join(roomId);
-      socket.roomId = roomId;
-      io.to(roomId).emit('ludoRoomJoined', { roomId });
-    } catch (e) { console.error('❌ ludoJoinRoom error:', e); }
-  });
-
-  socket.on('ludoPlayerReady', (data) => {
-    try {
-      const { roomId } = data || {};
-      const state = activeLudoGames.get(roomId);
-      if (!state) return;
-      state.ready = state.ready || new Set();
-      state.ready.add(socket.userId);
-      if (state.ready.size >= 2) {
-        state.status = 'active';
-        io.to(roomId).emit('ludoGameStart', sanitizeLudoState(state));
-      }
-    } catch (e) { console.error('❌ ludoPlayerReady error:', e); }
-  });
-
-  socket.on('ludoRollDice', (data) => {
-    try {
-      const { roomId } = data || {};
-      const state = activeLudoGames.get(roomId);
-      if (!state || state.status !== 'active') return;
-      const color = state.colors[socket.userId];
-      if (color !== state.turn) return; // not your turn
-      const roll = 1 + Math.floor(Math.random() * 6);
-      state.diceValue = roll;
-      io.to(roomId).emit('ludoGameState', sanitizeLudoState(state));
-    } catch (e) { console.error('❌ ludoRollDice error:', e); }
-  });
-
-  socket.on('ludoMovePiece', (data) => {
-    try {
-      const { roomId, player, piece } = data || {};
-      const state = activeLudoGames.get(roomId);
-      if (!state || state.status !== 'active') return;
-      const color = state.colors[socket.userId];
-      if (color !== state.turn) return;
-      const pIndex = Number(piece);
-      if (Number.isNaN(pIndex)) return;
-      const pos = state.positions[color][pIndex];
-      const roll = state.diceValue || 0;
-      if (roll <= 0) return;
-      const next = getNextLudoPosition(color, pos, roll);
-      if (next === null) return; // invalid
-      state.positions[color][pIndex] = next;
-      // very basic kill check (same cell, not base indices list)
-      const other = color === 'P1' ? 'P2' : 'P1';
-      for (let i = 0; i < 4; i++) {
-        if (state.positions[other][i] === next && !SAFE_POSITIONS.includes(next)) {
-          // send back to base
-          state.positions[other][i] = other === 'P1' ? 0 : 26;
-        }
-      }
-      // switch turn unless rolled 6
-      if (roll !== 6) state.turn = state.turn === 'P1' ? 'P2' : 'P1';
-      state.diceValue = null;
-      io.to(roomId).emit('ludoGameState', sanitizeLudoState(state));
-    } catch (e) { console.error('❌ ludoMovePiece error:', e); }
-  });
-
-  // Aliases for unified Ludo events expected by frontend (single backend)
-  socket.on('createGame', () => {
-    try {
-      const roomId = 'ludo_' + Math.random().toString(36).substr(2, 6);
-      const state = createInitialLudoState(roomId);
-      const user = { userId: socket.userId || socket.id, username: socket.username || 'Player', socketId: socket.id };
-      state.players = { P1: user };
-      state.colors = { [user.userId]: 'P1' };
-      activeLudoGames.set(roomId, state);
-      socket.join(roomId);
-      socket.roomId = roomId;
-      socket.emit('roomID', roomId);
-    } catch (e) { console.error('❌ createGame alias error:', e); }
-  });
-
-  socket.on('joinGame', (roomId) => {
-    try {
-      const state = activeLudoGames.get(roomId);
-      if (!state) { socket.emit('error', { message: 'Room not found' }); return; }
-      if (state.players && state.players.P2) { socket.emit('error', { message: 'Room full' }); return; }
-      const user = { userId: socket.userId || socket.id, username: socket.username || 'Player', socketId: socket.id };
-      state.players = state.players || {};
-      state.players.P2 = user;
-      state.colors[user.userId] = 'P2';
-      socket.join(roomId);
-      socket.roomId = roomId;
-      io.to(roomId).emit('roomID', roomId);
-    } catch (e) { console.error('❌ joinGame alias error:', e); }
-  });
-
-  socket.on('playerReady', () => {
-    try {
-      const roomId = socket.roomId;
-      if (!roomId) return;
-      const state = activeLudoGames.get(roomId);
-      if (!state) return;
-      state.ready = state.ready || new Set();
-      state.ready.add(socket.userId || socket.id);
-      if (state.ready.size >= 2) {
-        state.status = 'active';
-        io.to(roomId).emit('gameStart', { state: sanitizeLudoState(state) });
-        io.to(roomId).emit('gameStateUpdate', sanitizeLudoState(state));
-      }
-    } catch (e) { console.error('❌ playerReady alias error:', e); }
-  });
-
-  socket.on('rollDice', () => {
-    try {
-      const roomId = socket.roomId;
-      const state = activeLudoGames.get(roomId);
-      if (!state || state.status !== 'active') return;
-      const color = state.colors[socket.userId || socket.id];
-      if (!color || color !== state.turn) return;
-      state.diceValue = 1 + Math.floor(Math.random() * 6);
-      const valid = [];
-      for (let i = 0; i < 4; i++) {
-        const pos = state.positions[color][i];
-        const next = getNextLudoPosition(color, pos, state.diceValue);
-        if (next !== null) valid.push(i);
-      }
-      const payload = { ...sanitizeLudoState(state), validMoves: valid };
-      io.to(roomId).emit('gameStateUpdate', payload);
-    } catch (e) { console.error('❌ rollDice alias error:', e); }
-  });
-
-  socket.on('movePiece', (payload) => {
-    try {
-      const roomId = socket.roomId;
-      const state = activeLudoGames.get(roomId);
-      if (!state || state.status !== 'active') return;
-      const color = state.colors[socket.userId || socket.id];
-      if (!color || color !== state.turn) return;
-      const idx = Number(payload?.pieceIndex ?? payload?.piece);
-      if (Number.isNaN(idx)) return;
-      const pos = state.positions[color][idx];
-      const roll = state.diceValue || 0;
-      if (roll <= 0) return;
-      const next = getNextLudoPosition(color, pos, roll);
-      if (next === null) return;
-      state.positions[color][idx] = next;
-      const other = color === 'P1' ? 'P2' : 'P1';
-      for (let i = 0; i < 4; i++) {
-        if (state.positions[other][i] === next && !SAFE_POSITIONS.includes(next)) {
-          state.positions[other][i] = other === 'P1' ? 0 : 26;
-        }
-      }
-      if (roll !== 6) state.turn = state.turn === 'P1' ? 'P2' : 'P1';
-      state.diceValue = null;
-      const payload = sanitizeLudoState(state);
-      io.to(roomId).emit('gameStateUpdate', payload);
-    } catch (e) { console.error('❌ movePiece alias error:', e); }
-  });
+    
+    // Verify this piece can move
+    if (!state.validMoves.includes(pieceIndex)) {
+      console.log(`❌ Piece ${pieceIndex} cannot move`);
+      socket.emit('error', { message: 'Invalid move' });
+      return;
+    }
+    
+    const currentPos = state.positions[playerColor][pieceIndex];
+    const diceValue = state.diceValue;
+    const nextPos = getNextPosition(playerColor, currentPos, diceValue);
+    
+    if (nextPos === null) {
+      console.log(`❌ Cannot calculate next position`);
+      return;
+    }
+    
+    // Move the piece
+    state.positions[playerColor][pieceIndex] = nextPos;
+    console.log(`✅ Moved ${playerColor} piece ${pieceIndex} from ${currentPos} to ${nextPos}`);
+    
+    // Check for kills
+    const killedOpponent = performKillCheck(state, playerColor, pieceIndex);
+    
+    // Check if rolled a 6
+    const gotSix = (diceValue === 6);
+    
+    // Switch turn (or keep it if got 6 or killed)
+    switchTurn(state, gotSix, killedOpponent);
+    
+    // Clear dice and valid moves
+    state.diceValue = null;
+    state.validMoves = [];
+    
+    // Send updated state
+    const gameState = {
+      positions: state.positions,
+      diceValue: null,
+      turn: state.turn,
+      validMoves: [],
+      players: state.players
+    };
+    
+    io.to(roomId).emit('gameStateUpdate', gameState);
+    
+    // TODO: Check for winner
+    
+  } catch (e) {
+    console.error('❌ movePiece error:', e);
+  }
+});
 
   // Chat Message
   socket.on('chatMessage', (data) => {
@@ -909,7 +782,6 @@ io.on('connection', (socket) => {
       userSockets.delete(socket.userId);
     }
   });
-});
 
 // Game Logic Functions
 function processMove(room, move, player) {
