@@ -83,7 +83,10 @@ app.get('/health', (req, res) => {
 // Game Storage
 const activeRooms = new Map();
 const userSockets = new Map();
-// Add this section to api/index.js, replacing the existing Ludo handlers
+// ============================================
+// LUDO GAME - SERVER AUTHORITATIVE
+// Replace the Ludo section in api/index.js with this
+// ============================================
 
 // Ludo game state storage (server-authoritative)
 const activeLudoGames = new Map(); // roomId -> game state
@@ -213,29 +216,9 @@ function switchTurn(state, gotSix, killedOpponent) {
   console.log(`🔄 Turn switched to ${state.turn}`);
 }
 
-// --- Socket.IO connection scope ---
-io.on('connection', (socket) => {
-  console.log('🔌 Client connected:', socket.id);
-
-  // Minimal auth so Ludo/TicTacToe can refer to socket.userId/username
-  socket.on('authenticate', (data) => {
-    try {
-      const { userId, username, avatar } = data || {};
-      socket.userId = userId || socket.id;
-      socket.username = username || 'Player';
-      socket.avatar = avatar || '😀';
-      userSockets.set(socket.userId, socket.id);
-      socket.emit('authenticated', { success: true, socketId: socket.id });
-    } catch (e) {
-      console.error('❌ Authentication error:', e);
-      socket.emit('error', { message: 'Authentication failed' });
-    }
-  });
-
 // Socket event: Create Ludo game
 socket.on('createGame', () => {
   try {
-    // Require authentication before creating a room
     if (!socket.userId) {
       socket.emit('error', { message: 'Not authenticated' });
       return;
@@ -244,7 +227,7 @@ socket.on('createGame', () => {
     const roomId = 'ludo_' + Math.random().toString(36).substr(2, 6);
     const state = createInitialLudoState(roomId);
     
-    // Assign creator as P1
+    // CRITICAL: Assign creator as P1
     state.players.P1 = {
       userId: socket.userId,
       username: socket.username,
@@ -254,9 +237,11 @@ socket.on('createGame', () => {
     activeLudoGames.set(roomId, state);
     socket.join(roomId);
     socket.roomId = roomId;
+    socket.ludoColor = 'P1'; // Store player's color on socket
     
     socket.emit('roomID', roomId);
-    console.log(`🎮 Ludo room ${roomId} created by ${socket.username}`);
+    socket.emit('colorAssignment', { color: 'P1' }); // Tell player their color
+    console.log(`🎮 Ludo room ${roomId} created by ${socket.username} as P1`);
   } catch (e) {
     console.error('❌ createGame error:', e);
     socket.emit('error', { message: 'Failed to create game' });
@@ -266,7 +251,6 @@ socket.on('createGame', () => {
 // Socket event: Join Ludo game
 socket.on('joinGame', (roomId) => {
   try {
-    // Require authentication before joining a room
     if (!socket.userId) {
       socket.emit('error', { message: 'Not authenticated' });
       return;
@@ -284,7 +268,7 @@ socket.on('joinGame', (roomId) => {
       return;
     }
     
-    // Assign joiner as P2
+    // CRITICAL: Assign joiner as P2
     state.players.P2 = {
       userId: socket.userId,
       username: socket.username,
@@ -293,11 +277,19 @@ socket.on('joinGame', (roomId) => {
     
     socket.join(roomId);
     socket.roomId = roomId;
+    socket.ludoColor = 'P2'; // Store player's color on socket
     
-    // Notify both players
+    // Notify both players with color assignments
+    io.to(state.players.P1.socketId).emit('colorAssignment', { color: 'P1' });
+    io.to(state.players.P2.socketId).emit('colorAssignment', { color: 'P2' });
+    
     io.to(roomId).emit('roomID', roomId);
+    io.to(roomId).emit('playerJoined', { 
+      username: socket.username,
+      playersCount: 2
+    });
     
-    console.log(`👥 ${socket.username} joined Ludo room ${roomId}`);
+    console.log(`👥 ${socket.username} joined Ludo room ${roomId} as P2`);
   } catch (e) {
     console.error('❌ joinGame error:', e);
     socket.emit('error', { message: 'Failed to join game' });
@@ -307,7 +299,6 @@ socket.on('joinGame', (roomId) => {
 // Socket event: Player ready
 socket.on('playerReady', () => {
   try {
-    // Require authentication before readying up
     if (!socket.userId) {
       socket.emit('error', { message: 'Not authenticated' });
       return;
@@ -340,7 +331,7 @@ socket.on('playerReady', () => {
       };
       
       io.to(roomId).emit('gameStart', { state: gameState });
-      console.log(`🎮 Ludo game ${roomId} started!`);
+      console.log(`🎮 Ludo game ${roomId} started! P1 turn first.`);
     }
   } catch (e) {
     console.error('❌ playerReady error:', e);
@@ -350,7 +341,6 @@ socket.on('playerReady', () => {
 // Socket event: Roll dice
 socket.on('rollDice', (data) => {
   try {
-    // Require authentication before rolling
     if (!socket.userId) {
       socket.emit('error', { message: 'Not authenticated' });
       return;
@@ -362,19 +352,17 @@ socket.on('rollDice', (data) => {
     const state = activeLudoGames.get(roomId);
     if (!state || state.status !== 'active') return;
     
-    // Find which color this player is
-    let playerColor = null;
-    if (state.players.P1?.userId === socket.userId) playerColor = 'P1';
-    else if (state.players.P2?.userId === socket.userId) playerColor = 'P2';
+    const playerColor = socket.ludoColor; // Get player's color from socket
     
     if (!playerColor) {
-      console.log('❌ Player not found in game');
+      console.log('❌ Player color not assigned');
+      socket.emit('error', { message: 'Player color not assigned' });
       return;
     }
     
-    // Check if it's this player's turn
+    // CRITICAL: Check if it's this player's turn
     if (state.turn !== playerColor) {
-      console.log(`❌ Not ${playerColor}'s turn (turn: ${state.turn})`);
+      console.log(`❌ Not ${playerColor}'s turn (current turn: ${state.turn})`);
       socket.emit('error', { message: 'Not your turn' });
       return;
     }
@@ -426,7 +414,6 @@ socket.on('rollDice', (data) => {
 // Socket event: Move piece
 socket.on('movePiece', (data) => {
   try {
-    // Require authentication before moving piece
     if (!socket.userId) {
       socket.emit('error', { message: 'Not authenticated' });
       return;
@@ -441,13 +428,11 @@ socket.on('movePiece', (data) => {
     const pieceIndex = parseInt(data?.pieceIndex ?? data?.piece);
     if (isNaN(pieceIndex) || pieceIndex < 0 || pieceIndex > 3) return;
     
-    // Find player color
-    let playerColor = null;
-    if (state.players.P1?.userId === socket.userId) playerColor = 'P1';
-    else if (state.players.P2?.userId === socket.userId) playerColor = 'P2';
+    const playerColor = socket.ludoColor; // Get player's color from socket
     
     if (!playerColor || state.turn !== playerColor) {
       console.log(`❌ Invalid move attempt by ${playerColor}`);
+      socket.emit('error', { message: 'Not your turn' });
       return;
     }
     
@@ -474,20 +459,20 @@ socket.on('movePiece', (data) => {
     // Check for kills
     const killedOpponent = performKillCheck(state, playerColor, pieceIndex);
     
-  // Check win condition: all pieces at home end
-  const allHome = state.positions[playerColor].every(p => p === HOME_END[playerColor]);
-  if (allHome) {
-    state.status = 'finished';
-    state.winner = playerColor;
-    try {
-      io.to(roomId).emit('gameOver', {
-        winner: state.players[playerColor]?.username || playerColor,
-        color: playerColor
-      });
-    } catch (_) {}
-    activeLudoGames.delete(roomId);
-    return;
-  }
+    // Check win condition: all pieces at home end
+    const allHome = state.positions[playerColor].every(p => p === HOME_END[playerColor]);
+    if (allHome) {
+      state.status = 'finished';
+      state.winner = playerColor;
+      try {
+        io.to(roomId).emit('gameOver', {
+          winner: state.players[playerColor]?.username || playerColor,
+          color: playerColor
+        });
+      } catch (_) {}
+      activeLudoGames.delete(roomId);
+      return;
+    }
 
     // Check if rolled a 6
     const gotSix = (diceValue === 6);
@@ -509,8 +494,6 @@ socket.on('movePiece', (data) => {
     };
     
     io.to(roomId).emit('gameStateUpdate', gameState);
-    
-    // TODO: Check for winner
     
   } catch (e) {
     console.error('❌ movePiece error:', e);
@@ -871,7 +854,7 @@ socket.on('movePiece', (data) => {
     }
   });
 
-}); // <--- end io.on('connection')
+// <--- end io.on('connection')
 
 // Game Logic Functions
 function processMove(room, move, player) {

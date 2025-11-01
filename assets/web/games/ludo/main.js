@@ -17,7 +17,7 @@ const btnJoin = document.getElementById('joinRoomBtn');
 const btnReady = document.getElementById('readyBtn');
 const roomCodeEl = document.getElementById('roomCode');
 const youNameEl = document.getElementById('youName');
-const statusEl = document.getElementById('status');
+const statusEl = document.getElementById('game-status');
 
 // Local session identity
 let socket;
@@ -28,7 +28,7 @@ let isLive = false;
 let isConnected = false;
 let isAuthed = false;
 
-// Local snapshot of latest server state (initialize to base positions)
+// Local snapshot of latest server state
 let gameState = {
   positions: { P1: [500,501,502,503], P2: [600,601,602,603] },
   turn: 'P1',
@@ -75,6 +75,7 @@ function connect(){
 
   socket.on('authenticated', () => {
     isAuthed = true;
+    console.log('✅ Authenticated');
   });
 
   socket.on('connect_error', (err) => {
@@ -96,29 +97,44 @@ function connect(){
     console.log('📦 Room created:', id);
   });
 
-  // Game starts - CRITICAL: Get my color assignment
-  socket.on('gameStart', (payload) => {
-  dlog('🎮 Game started, payload:', payload);
-    const state = payload?.state || payload;
+  // CRITICAL: Listen for color assignment
+  socket.on('colorAssignment', (data) => {
+    myColor = data.color;
+    console.log('🎨 My color assigned:', myColor);
     
-    // CRITICAL: Determine my color from server state
-    if (state.players) {
-      if (state.players.P1?.userId === user.userId) {
-        myColor = 'P1';
-      } else if (state.players.P2?.userId === user.userId) {
-        myColor = 'P2';
-      }
+    // Update UI to show player's color
+    if (youNameEl) {
+      const displayColor = myColor === 'P1' ? 'Blue' : 'Green';
+      youNameEl.textContent += ` (${displayColor})`;
     }
-    
-  dlog('🎨 My color is:', myColor);
+  });
+
+  // Player joined notification
+  socket.on('playerJoined', (data) => {
+    console.log('👥 Player joined:', data);
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.textContent = `${data.playersCount}/2 players ready. Press Ready when ready!`;
+    }
+  });
+
+  // Game starts
+  socket.on('gameStart', (payload) => {
+    dlog('🎮 Game started, payload:', payload);
+    const state = payload?.state || payload;
     
     lobbyScreen.style.display = 'none';
     waitingScreen.style.display = 'none';
     gameBoard.style.display = 'block';
+    gameBoard.classList.remove('hidden');
     isLive = true;
     if (statusEl) { statusEl.style.display = 'none'; }
-  // Reset roll button text on start
-  try { const diceBtn = document.getElementById('dice-btn'); if (diceBtn) diceBtn.textContent = 'Roll'; } catch(e) {}
+    
+    // Reset roll button text on start
+    try { 
+      const diceBtn = document.getElementById('dice-btn'); 
+      if (diceBtn) diceBtn.textContent = 'Roll'; 
+    } catch(e) {}
     
     // Apply initial state from server
     applyState(state);
@@ -129,15 +145,32 @@ function connect(){
 
   // State updates from server
   socket.on('gameStateUpdate', (state) => {
-  dlog('📡 State update:', state);
+    dlog('📡 State update:', state);
     applyState(state);
     updateDiceButton(state);
-  // Restore roll button label after server update
-  try { const diceBtn = document.getElementById('dice-btn'); if (diceBtn) diceBtn.textContent = 'Roll'; } catch(e) {}
+    
+    // Restore roll button label after server update
+    try { 
+      const diceBtn = document.getElementById('dice-btn'); 
+      if (diceBtn && !diceBtn.disabled) diceBtn.textContent = 'Roll'; 
+    } catch(e) {}
+  });
+
+  // Game over
+  socket.on('gameOver', (data) => {
+    isLive = false;
+    alert(`Game Over! Winner: ${data.winner}`);
+    // Optionally reset or show game over screen
+  });
+
+  // Error handling
+  socket.on('error', (data) => {
+    console.error('❌ Server error:', data.message);
+    alert(data.message);
   });
 }
 
-// Apply authoritative state to UI - FIXED VERSION
+// Apply authoritative state to UI
 function applyState(state){
   if (!state) return;
   
@@ -156,10 +189,11 @@ function applyState(state){
   try { 
     const turnLabel = state.turn || 'P1';
     const isMyTurn = (myColor === turnLabel);
-    document.querySelector('.active-player span').textContent = isMyTurn ? 'Your Turn' : `${turnLabel}'s Turn`;
+    const turnText = isMyTurn ? 'Your Turn' : `${turnLabel}'s Turn`;
+    document.querySelector('.active-player span').textContent = turnText;
   } catch(e) {}
 
-  // Update piece positions - CRITICAL: Use server positions directly
+  // Update piece positions - Use server positions directly
   if (state.positions) {
     ['P1','P2'].forEach(player => {
       const arr = state.positions[player] || [];
@@ -198,8 +232,14 @@ function updateDiceButton(state) {
   
   if (canRoll) {
     try { UI.enableDice(); } catch(e) {}
+    diceBtn.textContent = 'Roll';
   } else {
     try { UI.disableDice(); } catch(e) {}
+    if (isMyTurn && state.diceValue > 0) {
+      diceBtn.textContent = 'Move a piece';
+    } else {
+      diceBtn.textContent = "Opponent's turn";
+    }
   }
 }
 
@@ -213,6 +253,13 @@ ludo.onDiceClick = function(){
   
   if (!myColor) {
     dlog('⚠️ Cannot roll: color not assigned');
+    alert('Your color is not assigned yet. Please wait.');
+    return;
+  }
+  
+  if (gameState.turn !== myColor) {
+    dlog('⚠️ Cannot roll: not your turn');
+    alert('Not your turn!');
     return;
   }
   
@@ -225,11 +272,14 @@ ludo.onDiceClick = function(){
   try { UI.disableDice(); } catch(e) {}
   try {
     const diceBtn = document.getElementById('dice-btn');
-    if (diceBtn) { diceBtn.disabled = true; diceBtn.textContent = 'Rolling...'; }
+    if (diceBtn) { 
+      diceBtn.disabled = true; 
+      diceBtn.textContent = 'Rolling...'; 
+    }
   } catch(e) {}
 };
 
-// Intercept piece click at UI layer and forward to server
+// Intercept piece click and forward to server
 const _onPieceClick = ludo.onPieceClick.bind(ludo);
 ludo.onPieceClick = function(event){
   if (!isLive || !roomId) {
@@ -243,14 +293,32 @@ ludo.onPieceClick = function(event){
   }
 
   const player = target.getAttribute('player-id');
-  const piece = target.getAttribute('piece');
+  const piece = parseInt(target.getAttribute('piece'));
+  
   if (player !== myColor) {
     dlog('⚠️ Cannot move opponent pieces');
+    alert('Cannot move opponent pieces!');
+    return;
+  }
+
+  if (gameState.turn !== myColor) {
+    dlog('⚠️ Not your turn');
+    alert('Not your turn!');
+    return;
+  }
+
+  // Verify this piece is in valid moves
+  if (!gameState.validMoves || !gameState.validMoves.includes(piece)) {
+    dlog('⚠️ Invalid piece selection');
+    alert('This piece cannot move!');
     return;
   }
 
   dlog('🎯 Requesting move:', player, piece);
-  socket.emit('movePiece', { roomId, pieceIndex: parseInt(piece), player });
+  socket.emit('movePiece', { roomId, pieceIndex: piece, player });
+  
+  // Unhighlight immediately for better UX
+  try { UI.unhighlightPieces(); } catch(e) {}
 };
 
 // Wire lobby buttons
@@ -265,7 +333,10 @@ btnCreate.addEventListener('click', () => {
 btnJoin.addEventListener('click', () => {
   connect();
   const rid = (inputRoom.value||'').trim();
-  if (!rid) return;
+  if (!rid) {
+    alert('Please enter a room code');
+    return;
+  }
   const emitJoin = () => socket.emit('joinGame', rid);
   if (isAuthed) emitJoin();
   else if (isConnected) socket.once('authenticated', emitJoin);
