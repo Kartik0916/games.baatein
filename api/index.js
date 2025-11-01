@@ -146,9 +146,12 @@ function getNextPosition(color, currentPos, steps) {
   // Move step by step
   let pos = currentPos;
   for (let i = 0; i < steps; i++) {
-    // Can't move beyond home end
-    if (pos === HOME_END[color]) return null;
-    pos = stepOnce(color, pos);
+    const next = stepOnce(color, pos);
+    // If we are already at home end and cannot advance further, this move overshoots
+    if (next === pos && pos === HOME_END[color]) {
+      return null;
+    }
+    pos = next;
   }
   
   return pos;
@@ -232,6 +235,12 @@ io.on('connection', (socket) => {
 // Socket event: Create Ludo game
 socket.on('createGame', () => {
   try {
+    // Require authentication before creating a room
+    if (!socket.userId) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+
     const roomId = 'ludo_' + Math.random().toString(36).substr(2, 6);
     const state = createInitialLudoState(roomId);
     
@@ -257,6 +266,12 @@ socket.on('createGame', () => {
 // Socket event: Join Ludo game
 socket.on('joinGame', (roomId) => {
   try {
+    // Require authentication before joining a room
+    if (!socket.userId) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+
     const state = activeLudoGames.get(roomId);
     
     if (!state) {
@@ -292,6 +307,12 @@ socket.on('joinGame', (roomId) => {
 // Socket event: Player ready
 socket.on('playerReady', () => {
   try {
+    // Require authentication before readying up
+    if (!socket.userId) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+
     const roomId = socket.roomId;
     if (!roomId) return;
     
@@ -329,6 +350,12 @@ socket.on('playerReady', () => {
 // Socket event: Roll dice
 socket.on('rollDice', (data) => {
   try {
+    // Require authentication before rolling
+    if (!socket.userId) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+
     const roomId = data?.roomId || socket.roomId;
     if (!roomId) return;
     
@@ -399,6 +426,12 @@ socket.on('rollDice', (data) => {
 // Socket event: Move piece
 socket.on('movePiece', (data) => {
   try {
+    // Require authentication before moving piece
+    if (!socket.userId) {
+      socket.emit('error', { message: 'Not authenticated' });
+      return;
+    }
+
     const roomId = data?.roomId || socket.roomId;
     if (!roomId) return;
     
@@ -441,6 +474,21 @@ socket.on('movePiece', (data) => {
     // Check for kills
     const killedOpponent = performKillCheck(state, playerColor, pieceIndex);
     
+  // Check win condition: all pieces at home end
+  const allHome = state.positions[playerColor].every(p => p === HOME_END[playerColor]);
+  if (allHome) {
+    state.status = 'finished';
+    state.winner = playerColor;
+    try {
+      io.to(roomId).emit('gameOver', {
+        winner: state.players[playerColor]?.username || playerColor,
+        color: playerColor
+      });
+    } catch (_) {}
+    activeLudoGames.delete(roomId);
+    return;
+  }
+
     // Check if rolled a 6
     const gotSix = (diceValue === 6);
     
@@ -799,6 +847,27 @@ socket.on('movePiece', (data) => {
     handlePlayerLeave(socket);
     if (socket.userId) {
       userSockets.delete(socket.userId);
+    }
+
+    // Cleanup any Ludo room this socket was part of
+    try {
+      for (const [roomId, state] of activeLudoGames.entries()) {
+        const isP1 = state.players?.P1?.socketId === socket.id;
+        const isP2 = state.players?.P2?.socketId === socket.id;
+        if (isP1 || isP2) {
+          // Notify opponent
+          try {
+            io.to(roomId).emit('opponentLeft', {
+              message: 'Your opponent disconnected'
+            });
+          } catch (_) {}
+
+          activeLudoGames.delete(roomId);
+          break;
+        }
+      }
+    } catch (e) {
+      console.error('❌ Ludo cleanup on disconnect failed:', e);
     }
   });
 

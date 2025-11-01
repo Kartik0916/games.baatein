@@ -4,6 +4,8 @@
 
 .ludo-container {
     width: min(92vw, 480px);
+    max-width: 100%;
+    overflow: hidden;
     margin: 20px auto;
 }
 

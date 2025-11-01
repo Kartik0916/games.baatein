@@ -148,11 +148,16 @@ class BaateinGame {
             console.log('🔌 Connecting to WebSocket:', wsUrl);
             
             this.socket = io(wsUrl, {
-                transports: ['websocket', 'polling'],
+                // Prefer polling first to avoid strict proxies; then upgrade to websocket
+                transports: ['polling', 'websocket'],
+                upgrade: true,
+                path: '/socket.io',
+                timeout: 20000,
                 reconnection: true,
                 reconnectionAttempts: Infinity,
                 reconnectionDelay: 500,
-                reconnectionDelayMax: 5000
+                reconnectionDelayMax: 5000,
+                withCredentials: false
             });
             
             this.socket.on('connect', () => {

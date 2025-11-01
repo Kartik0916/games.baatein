@@ -28,6 +28,17 @@ let isLive = false;
 let isConnected = false;
 let isAuthed = false;
 
+// Local snapshot of latest server state (initialize to base positions)
+let gameState = {
+  positions: { P1: [500,501,502,503], P2: [600,601,602,603] },
+  turn: 'P1',
+  diceValue: null
+};
+
+// Debug logging toggle
+const DEBUG = !!window.DEBUG;
+const dlog = (...args) => { if (DEBUG) console.log(...args); };
+
 function ensureUser(){
   if (user) return user;
   try {
@@ -56,7 +67,7 @@ function connect(){
   });
 
   socket.on('connect', () => {
-    console.log('🔌 Connected to server');
+    dlog('🔌 Connected to server');
     socket.emit('authenticate', user);
     isConnected = true;
     if (statusEl) { statusEl.style.display = 'none'; statusEl.textContent = ''; }
@@ -87,7 +98,7 @@ function connect(){
 
   // Game starts - CRITICAL: Get my color assignment
   socket.on('gameStart', (payload) => {
-    console.log('🎮 Game started, payload:', payload);
+  dlog('🎮 Game started, payload:', payload);
     const state = payload?.state || payload;
     
     // CRITICAL: Determine my color from server state
@@ -99,12 +110,15 @@ function connect(){
       }
     }
     
-    console.log('🎨 My color is:', myColor);
+  dlog('🎨 My color is:', myColor);
     
     lobbyScreen.style.display = 'none';
     waitingScreen.style.display = 'none';
     gameBoard.style.display = 'block';
     isLive = true;
+    if (statusEl) { statusEl.style.display = 'none'; }
+  // Reset roll button text on start
+  try { const diceBtn = document.getElementById('dice-btn'); if (diceBtn) diceBtn.textContent = 'Roll'; } catch(e) {}
     
     // Apply initial state from server
     applyState(state);
@@ -115,9 +129,11 @@ function connect(){
 
   // State updates from server
   socket.on('gameStateUpdate', (state) => {
-    console.log('📡 State update:', state);
+  dlog('📡 State update:', state);
     applyState(state);
     updateDiceButton(state);
+  // Restore roll button label after server update
+  try { const diceBtn = document.getElementById('dice-btn'); if (diceBtn) diceBtn.textContent = 'Roll'; } catch(e) {}
   });
 }
 
@@ -125,7 +141,8 @@ function connect(){
 function applyState(state){
   if (!state) return;
   
-  console.log('🔄 Applying state:', state);
+  dlog('🔄 Applying state:', state);
+  gameState = state;
   
   // Update dice display
   if (typeof state.diceValue === 'number' && state.diceValue > 0) {
@@ -164,7 +181,7 @@ function applyState(state){
   const isMyTurn = (myColor && state.turn === myColor);
   
   if (isMyTurn && Array.isArray(state.validMoves) && state.validMoves.length > 0) {
-    console.log('✨ Highlighting my pieces:', state.validMoves);
+    dlog('✨ Highlighting my pieces:', state.validMoves);
     try { UI.highlightPieces(myColor, state.validMoves); } catch(e) { console.error(e); }
   }
 }
@@ -190,46 +207,50 @@ function updateDiceButton(state) {
 const _onDiceClick = ludo.onDiceClick.bind(ludo);
 ludo.onDiceClick = function(){
   if (!isLive || !roomId) {
-    console.log('⚠️ Cannot roll: game not live or no room');
+    dlog('⚠️ Cannot roll: game not live or no room');
     return;
   }
   
   if (!myColor) {
-    console.log('⚠️ Cannot roll: color not assigned');
+    dlog('⚠️ Cannot roll: color not assigned');
     return;
   }
   
-  console.log('🎲 Requesting dice roll for', myColor);
+  dlog('🎲 Requesting dice roll for', myColor);
   
   // CRITICAL: Don't roll locally - ask server
   socket.emit('rollDice', { roomId });
   
   // Disable dice button immediately
   try { UI.disableDice(); } catch(e) {}
+  try {
+    const diceBtn = document.getElementById('dice-btn');
+    if (diceBtn) { diceBtn.disabled = true; diceBtn.textContent = 'Rolling...'; }
+  } catch(e) {}
 };
 
-// Patch piece click - SEND TO SERVER
-const _handlePieceClick = ludo.handlePieceClick.bind(ludo);
-ludo.handlePieceClick = function(player, piece){
+// Intercept piece click at UI layer and forward to server
+const _onPieceClick = ludo.onPieceClick.bind(ludo);
+ludo.onPieceClick = function(event){
   if (!isLive || !roomId) {
-    console.log('⚠️ Cannot move: game not live or no room');
+    dlog('⚠️ Cannot move: game not live or no room');
     return;
   }
-  
-  // CRITICAL: Only allow moving my own pieces
+
+  const target = event.target;
+  if (!target || !target.classList.contains('player-piece') || !target.classList.contains('highlight')) {
+    return;
+  }
+
+  const player = target.getAttribute('player-id');
+  const piece = target.getAttribute('piece');
   if (player !== myColor) {
-    console.log('⚠️ Cannot move opponent pieces');
+    dlog('⚠️ Cannot move opponent pieces');
     return;
   }
-  
-  console.log('🎯 Moving piece:', player, piece);
-  
-  // Send move to server
-  socket.emit('movePiece', { 
-    roomId,
-    pieceIndex: parseInt(piece), 
-    player 
-  });
+
+  dlog('🎯 Requesting move:', player, piece);
+  socket.emit('movePiece', { roomId, pieceIndex: parseInt(piece), player });
 };
 
 // Wire lobby buttons
