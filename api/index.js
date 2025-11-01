@@ -216,6 +216,25 @@ function switchTurn(state, gotSix, killedOpponent) {
   console.log(`🔄 Turn switched to ${state.turn}`);
 }
 
+// --- Socket.IO connection scope ---
+io.on('connection', (socket) => {
+  console.log('🔌 Client connected:', socket.id);
+
+  // Minimal auth so games can refer to socket.userId/username
+  socket.on('authenticate', (data) => {
+    try {
+      const { userId, username, avatar } = data || {};
+      socket.userId = userId || socket.id;
+      socket.username = username || 'Player';
+      socket.avatar = avatar || '😀';
+      userSockets.set(socket.userId, socket.id);
+      socket.emit('authenticated', { success: true, socketId: socket.id });
+    } catch (e) {
+      console.error('❌ Authentication error:', e);
+      socket.emit('error', { message: 'Authentication failed' });
+    }
+  });
+
 // Socket event: Create Ludo game
 socket.on('createGame', () => {
   try {
@@ -854,7 +873,7 @@ socket.on('movePiece', (data) => {
     }
   });
 
-// <--- end io.on('connection')
+}); // <--- end io.on('connection')
 
 // Game Logic Functions
 function processMove(room, move, player) {
