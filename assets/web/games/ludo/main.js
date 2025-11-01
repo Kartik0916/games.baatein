@@ -26,6 +26,7 @@ let roomId = null;
 let myColor = null; // CRITICAL: Track which color this player is
 let isLive = false;
 let isConnected = false;
+let isAuthed = false;
 
 function ensureUser(){
   if (user) return user;
@@ -59,6 +60,10 @@ function connect(){
     socket.emit('authenticate', user);
     isConnected = true;
     if (statusEl) { statusEl.style.display = 'none'; statusEl.textContent = ''; }
+  });
+
+  socket.on('authenticated', () => {
+    isAuthed = true;
   });
 
   socket.on('connect_error', (err) => {
@@ -231,7 +236,9 @@ ludo.handlePieceClick = function(player, piece){
 btnCreate.addEventListener('click', () => {
   connect();
   const emitCreate = () => socket.emit('createGame');
-  if (isConnected) emitCreate(); else socket.once('connect', emitCreate);
+  if (isAuthed) emitCreate();
+  else if (isConnected) socket.once('authenticated', emitCreate);
+  else socket.once('connect', () => socket.once('authenticated', emitCreate));
 });
 
 btnJoin.addEventListener('click', () => {
@@ -239,13 +246,17 @@ btnJoin.addEventListener('click', () => {
   const rid = (inputRoom.value||'').trim();
   if (!rid) return;
   const emitJoin = () => socket.emit('joinGame', rid);
-  if (isConnected) emitJoin(); else socket.once('connect', emitJoin);
+  if (isAuthed) emitJoin();
+  else if (isConnected) socket.once('authenticated', emitJoin);
+  else socket.once('connect', () => socket.once('authenticated', emitJoin));
 });
 
 btnReady.addEventListener('click', () => {
   if (!roomId) return;
   const emitReady = () => socket.emit('playerReady');
-  if (isConnected) emitReady(); else socket.once('connect', emitReady);
+  if (isAuthed) emitReady();
+  else if (isConnected) socket.once('authenticated', emitReady);
+  else socket.once('connect', () => socket.once('authenticated', emitReady));
   waitingScreen.textContent = 'Ready. Waiting for opponent…';
   btnReady.disabled = true;
 });
